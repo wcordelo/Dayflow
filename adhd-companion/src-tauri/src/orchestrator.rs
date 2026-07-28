@@ -308,6 +308,10 @@ pub fn reduce(state: &mut OrchestratorState, event: OrchEvent, now: i64) {
             }
             state.guards.confidence = confidence;
             if confidence == Confidence::Low {
+                // Mirror TS: low-confidence drift clears any pending wait, never fires.
+                state.pending_drift = false;
+                state.pending_drift_since_unix = None;
+                state.pending_confidence = None;
                 state.last_transition = Some(Transition {
                     from: "idle".into(),
                     to: "idle".into(),
@@ -419,6 +423,36 @@ mod tests {
                 anchor: "app_switch".into(),
             },
             1000,
+        );
+        assert_eq!(s.level, NudgeLevel::Idle);
+    }
+
+    #[test]
+    fn low_confidence_clears_stale_pending() {
+        let mut s = OrchestratorState::default();
+        reduce(
+            &mut s,
+            OrchEvent::DriftDetected {
+                confidence: Confidence::High,
+            },
+            1000,
+        );
+        assert!(s.pending_drift);
+        reduce(
+            &mut s,
+            OrchEvent::DriftDetected {
+                confidence: Confidence::Low,
+            },
+            1001,
+        );
+        assert!(!s.pending_drift);
+        assert!(s.pending_confidence.is_none());
+        reduce(
+            &mut s,
+            OrchEvent::EventAnchor {
+                anchor: "app_switch".into(),
+            },
+            1002,
         );
         assert_eq!(s.level, NudgeLevel::Idle);
     }

@@ -136,6 +136,16 @@ pub fn run_monitor(
                 );
             }
         }
+    } else {
+        // unknown / low-confidence drift that will not nudge — clear stale pending
+        // so a later anchor cannot fire from an outdated drift observation.
+        crate::orchestrator::reduce(
+            state,
+            OrchEvent::DriftDetected {
+                confidence: Confidence::Low,
+            },
+            now,
+        );
     }
     Ok(result)
 }

@@ -326,6 +326,14 @@ fn pause_nudges(
     state: tauri::State<'_, Arc<AppState>>,
     minutes: i64,
 ) -> Result<AppSettings, String> {
+    apply_pause_nudges(&app, &state, minutes)
+}
+
+fn apply_pause_nudges(
+    app: &tauri::AppHandle,
+    state: &AppState,
+    minutes: i64,
+) -> Result<AppSettings, String> {
     let until = now_unix() + minutes * 60;
     let mut settings = state.settings.lock();
     settings.pause_nudges_until = Some(until);
@@ -351,7 +359,7 @@ fn pause_nudges(
             now_unix(),
         );
     }
-    nudge_windows::hide_nudge_windows(&app)?;
+    nudge_windows::hide_nudge_windows(app)?;
     Ok(snapshot)
 }
 
@@ -481,9 +489,7 @@ pub fn run() {
                     }
                     "pause" => {
                         if let Some(st) = app.try_state::<Arc<AppState>>() {
-                            let until = now_unix() + 30 * 60;
-                            st.settings.lock().pause_nudges_until = Some(until);
-                            st.orch.lock().guards.paused = true;
+                            let _ = apply_pause_nudges(app, &st, 30);
                         }
                     }
                     _ => {}
