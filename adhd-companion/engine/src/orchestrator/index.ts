@@ -314,6 +314,9 @@ export function reduce(
       if (event.confidence === "low") {
         return {
           ...withConf,
+          pendingDrift: false,
+          pendingDriftSinceUnix: null,
+          pendingConfidence: null,
           lastTransition: {
             from: state.level,
             to: state.level,

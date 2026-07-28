@@ -47,8 +47,56 @@ jobs:
             echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Launch Cursor Cloud Agent
+      - name: Skip if a bugbot agent is still running for this PR
         if: steps.pr.outputs.skip != 'true'
+        id: agent_gate
+        env:
+          CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
+        run: |
+          set -euo pipefail
+          echo "skip_agent=false" >> "$GITHUB_OUTPUT"
+          PR_URL='https://github.com/wcordelo/Dayflow/pull/2'
+          items=$(curl -sS -u "${CURSOR_API_KEY}:" \
+            -G 'https://api.cursor.com/v1/agents' \
+            --data-urlencode "prUrl=${PR_URL}" \
+            --data-urlencode 'includeArchived=false' \
+            --data-urlencode 'limit=100')
+          export ITEMS="$items"
+          python3 - <<'PY'
+          import json, os, subprocess
+
+          key = os.environ["CURSOR_API_KEY"]
+          data = json.loads(os.environ["ITEMS"])
+          active = {"CREATING", "RUNNING"}
+          for item in data.get("items", []):
+              run_id = item.get("latestRunId")
+              if not run_id:
+                  continue
+              agent_id = item["id"]
+              proc = subprocess.run(
+                  [
+                      "curl",
+                      "-sS",
+                      "-u",
+                      f"{key}:",
+                      f"https://api.cursor.com/v1/agents/{agent_id}/runs/{run_id}",
+                  ],
+                  capture_output=True,
+                  text=True,
+                  check=True,
+              )
+              status = json.loads(proc.stdout).get("status")
+              if status in active:
+                  print(
+                      f"::notice::Skipping launch: agent {agent_id} run {run_id} is {status}"
+                  )
+                  with open(os.environ["GITHUB_OUTPUT"], "a") as out:
+                      out.write("skip_agent=true\n")
+                  break
+          PY
+
+      - name: Launch Cursor Cloud Agent
+        if: steps.pr.outputs.skip != 'true' && steps.agent_gate.outputs.skip_agent != 'true'
         env:
           CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
         run: |
