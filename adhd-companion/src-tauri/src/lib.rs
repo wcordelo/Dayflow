@@ -366,6 +366,31 @@ fn update_settings(
     {
         let db = state.db.lock();
         merged.persist_to_db(&db).map_err(|e| e.to_string())?;
+        // Refresh orchestrator guards immediately so companion_enabled / quiet hours /
+        // budget / aggressiveness apply before the next capture or 15s tick.
+        let day = logical_day_key(now_unix());
+        let active = db
+            .list_priorities(&day)
+            .unwrap_or_default()
+            .iter()
+            .filter(|p| p.status == "active")
+            .count() as u32;
+        let mut orch = state.orch.lock();
+        let focus = state.focus.lock();
+        let last = state.last_nudge_present_unix.lock();
+        guards::sync_guards(
+            &mut orch,
+            &merged,
+            active,
+            focus.bundle_id.as_deref(),
+            focus.title.as_deref(),
+            focus.url.as_deref(),
+            now_unix(),
+        );
+        if let Some(t) = *last {
+            orch.guards.minutes_since_last_nudge = Some(((now_unix() - t) / 60).max(0));
+        }
+        state::save_orchestrator(&db, &orch, *last);
     }
     state
         .capture
