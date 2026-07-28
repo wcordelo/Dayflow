@@ -115,9 +115,10 @@ impl CaptureService {
             });
         }
 
-        // Rate limit
+        // Rate limit — check only; do not advance the clock until privacy allows
+        // a real capture attempt (Skip/PauseCapture must not burn the 200ms budget).
         {
-            let mut last = self.last_capture_at.lock();
+            let last = self.last_capture_at.lock();
             if let Some(t) = *last {
                 if t.elapsed() < self.min_interval {
                     return Ok(CaptureResult {
@@ -130,7 +131,6 @@ impl CaptureService {
                     });
                 }
             }
-            *last = Some(Instant::now());
         }
 
         let rules = self.rules.read().clone();
@@ -161,6 +161,8 @@ impl CaptureService {
             }
             PrivacyDecision::Allow | PrivacyDecision::Redact { .. } => {}
         }
+
+        *self.last_capture_at.lock() = Some(Instant::now());
 
         // Compute / accept frame hash for idle_fallback / visual_change dedupe.
         // When there is no real JPEG, do not hash the shared placeholder bytes —
@@ -378,5 +380,50 @@ mod tests {
         a.window_title = Some("Mail".into());
         let r3 = cap.handle_event(&db, a, None, 2).unwrap();
         assert!(!r3.deduped && !r3.skipped, "focus change must escape placeholder dedupe");
+    }
+
+    #[test]
+    fn privacy_skip_does_not_consume_debounce() {
+        let dir = tempdir().unwrap();
+        let db = Database::open(dir.path()).unwrap();
+        let cap = CaptureService::new();
+        cap.start();
+        let incog = CaptureEvent {
+            trigger: "window_focus".into(),
+            bundle_id: Some("com.google.Chrome".into()),
+            window_title: Some("Secret - Incognito".into()),
+            browser_url: None,
+            idle_seconds: None,
+            jpeg_base64: None,
+            accessibility_text: None,
+            frame_hash: Some("priv1".into()),
+        };
+        let skip = cap.handle_event(&db, incog, None, 0).unwrap();
+        assert!(skip.skipped);
+        assert!(
+            matches!(
+                &skip.decision,
+                PrivacyDecision::Skip { reason } if reason == "incognito"
+            ),
+            "expected incognito skip, got {:?}",
+            skip.decision
+        );
+        // Immediate legitimate capture must not be rejected as debounce.
+        let ok = CaptureEvent {
+            trigger: "window_focus".into(),
+            bundle_id: Some("com.apple.Safari".into()),
+            window_title: Some("Docs".into()),
+            browser_url: None,
+            idle_seconds: None,
+            jpeg_base64: None,
+            accessibility_text: None,
+            frame_hash: Some("ok1".into()),
+        };
+        let r = cap.handle_event(&db, ok, None, 1).unwrap();
+        assert!(
+            !r.skipped,
+            "privacy skip must not burn debounce; got {:?}",
+            r.decision
+        );
     }
 }

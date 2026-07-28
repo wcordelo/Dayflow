@@ -316,6 +316,13 @@ impl Database {
         Ok(())
     }
 
+    pub fn count_nudge_events(&self) -> Result<i64, DbError> {
+        let n: i64 = self
+            .conn
+            .query_row("SELECT COUNT(*) FROM nudge_events", [], |r| r.get(0))?;
+        Ok(n)
+    }
+
     pub fn log_llm_call(
         &self,
         day: &str,

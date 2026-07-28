@@ -277,24 +277,14 @@ fn acknowledge_nudge(
                 snapshot.persist_to_db(&db).map_err(|e| e.to_string())?;
             }
         }
-        let mut orch = state.orch.lock();
-        orch.guards.overwhelm = true;
-        orch.guards.paused = true;
-        // Pre-set deadline so enter_cooldown("overwhelm") keeps it (like pause).
-        orch.guards.cooldown_until_unix = Some(until);
+        // Guards/cooldown are synced inside dispatch_event from settings.
     }
-    let next = {
-        let mut orch = state.orch.lock();
-        orchestrator::reduce(
-            &mut orch,
-            OrchEvent::Acknowledge { reason },
-            now_unix(),
-        );
-        orch.clone()
-    };
+    // Route through Pipeline so acknowledge/snooze/overwhelm write nudge_events.
+    let _step = with_pipeline(&state, |p| {
+        p.dispatch_event(OrchEvent::Acknowledge { reason })
+    });
     nudge_windows::hide_nudge_windows(&app)?;
-    persist_orch(&state);
-    Ok(next)
+    Ok(state.orch.lock().clone())
 }
 
 #[tauri::command]
@@ -407,20 +397,13 @@ fn apply_pause_nudges(
         .capture
         .pause_nudges_only
         .store(true, std::sync::atomic::Ordering::SeqCst);
-    {
-        let mut orch = state.orch.lock();
-        orch.guards.paused = true;
-        orch.guards.cooldown_until_unix = Some(until);
-        orchestrator::reduce(
-            &mut orch,
-            OrchEvent::Acknowledge {
-                reason: "pause".into(),
-            },
-            now_unix(),
-        );
-    }
+    // Pipeline dispatch logs nudge_events; sync_guards picks up pause deadline.
+    let _step = with_pipeline(state, |p| {
+        p.dispatch_event(OrchEvent::Acknowledge {
+            reason: "pause".into(),
+        })
+    });
     nudge_windows::hide_nudge_windows(app)?;
-    persist_orch(state);
     Ok(snapshot)
 }
 
@@ -448,20 +431,12 @@ fn pause_watching(
         .capture
         .pause_capture
         .store(true, std::sync::atomic::Ordering::SeqCst);
-    {
-        let mut orch = state.orch.lock();
-        orch.guards.paused = true;
-        orch.guards.cooldown_until_unix = Some(until);
-        orchestrator::reduce(
-            &mut orch,
-            OrchEvent::Acknowledge {
-                reason: "pause".into(),
-            },
-            now_unix(),
-        );
-    }
+    let _step = with_pipeline(&state, |p| {
+        p.dispatch_event(OrchEvent::Acknowledge {
+            reason: "pause".into(),
+        })
+    });
     nudge_windows::hide_nudge_windows(&app)?;
-    persist_orch(&state);
     Ok(snapshot)
 }
 
@@ -479,22 +454,13 @@ fn overwhelm_until_boundary(
         let db = state.db.lock();
         s.persist_to_db(&db).map_err(|e| e.to_string())?;
     }
-    {
-        let mut orch = state.orch.lock();
-        orch.guards.overwhelm = true;
-        orch.guards.paused = true;
-        // Pre-set deadline so enter_cooldown("overwhelm") keeps it (like pause).
-        orch.guards.cooldown_until_unix = Some(until);
-        orchestrator::reduce(
-            &mut orch,
-            OrchEvent::Acknowledge {
-                reason: "overwhelm".into(),
-            },
-            now_unix(),
-        );
-    }
+    // Guards/cooldown synced from settings inside dispatch_event.
+    let _step = with_pipeline(&state, |p| {
+        p.dispatch_event(OrchEvent::Acknowledge {
+            reason: "overwhelm".into(),
+        })
+    });
     nudge_windows::hide_nudge_windows(&app)?;
-    persist_orch(&state);
     Ok(s)
 }
 
