@@ -273,10 +273,14 @@ impl<'a> Pipeline<'a> {
 
     pub fn wake(&mut self) -> PipelineStepResult {
         let level_before = self.orch.level.as_str().to_string();
-        // Resume capture after unlock unless pause-watching
+        // Sleep and DRM share `pause_capture`. Clear the sleep pause when nudges-only
+        // mode is active, then re-apply DRM (or leave pause-watching untouched).
         if self.capture.pause_nudges_only.load(Ordering::SeqCst) {
             self.capture.pause_capture.store(false, Ordering::SeqCst);
         }
+        self.capture
+            .on_focus_changed(self.focus.bundle_id.as_deref());
+
         // Match tick/ingest: re-evaluate budget + guards after sleep (quiet hours,
         // meeting, pause, spacing can all change across a lid-close interval).
         let day = logical_day_key(now_unix());
@@ -285,36 +289,55 @@ impl<'a> Pipeline<'a> {
         let rules = self.capture.rules.read().clone();
         let suppressed_l3_drm =
             should_suppress_l3_for_focus(self.focus.bundle_id.as_deref(), &rules);
-        if self.should_quiet_nudge_progression(suppressed_l3_drm) {
-            self.clear_expired_cooldown();
-            return PipelineStepResult {
-                capture: None,
-                monitor: None,
-                level_before: level_before.clone(),
-                level_after: level_before,
-                presented_l1: false,
-                should_show_l2: false,
-                should_show_l3: false,
-                suppressed_l3_drm: true,
-            };
-        }
+        let quiet = self.should_quiet_nudge_progression(suppressed_l3_drm);
 
+        // Always dispatch Wake so wall-clock deadlines reload and wake_cancel runs.
+        // Under DRM / pause-watching, suppress UI and roll back pending/escalate
+        // progression (keep wake_cancel + cooldown expiry).
+        let snap = quiet.then(|| self.orch.clone());
         crate::orchestrator::reduce(self.orch, OrchEvent::Wake, now_unix());
-        let level_after = self.orch.level.as_str().to_string();
-        let (presented_l1, should_show_l2, should_show_l3) =
-            presentation_flags(&level_before, &level_after, suppressed_l3_drm);
-        // After wake, re-present L2/L3 panels (windows can be hidden across sleep).
-        // Do NOT re-fire L1 notifications unless wake actually transitioned into L1.
-        let should_show_l2 = should_show_l2 || level_after == "L2";
-        let should_show_l3 = should_show_l3 || (level_after == "L3" && !suppressed_l3_drm);
-        if level_before == "idle" && level_after != "idle" {
-            let reason = self
+        if let Some(prev) = snap {
+            let wake_cancelled = self
                 .orch
                 .last_transition
                 .as_ref()
-                .map(|t| t.reason.clone())
-                .unwrap_or_else(|| "wake".into());
-            self.record_new_nudge_session(&day, "idle", &reason, None);
+                .map(|t| t.reason.starts_with("wake_cancel:"))
+                .unwrap_or(false);
+            if !wake_cancelled {
+                let progressed = self.orch.level != prev.level
+                    || self.orch.escalate_after_unix != prev.escalate_after_unix
+                    || self.orch.pending_drift != prev.pending_drift;
+                if progressed {
+                    let cd = self.orch.cooldown_until_unix;
+                    let gcd = self.orch.guards.cooldown_until_unix;
+                    *self.orch = prev;
+                    self.orch.cooldown_until_unix = cd;
+                    self.orch.guards.cooldown_until_unix = gcd;
+                }
+            }
+        }
+
+        let level_after = self.orch.level.as_str().to_string();
+        let (mut presented_l1, mut should_show_l2, mut should_show_l3) =
+            presentation_flags(&level_before, &level_after, suppressed_l3_drm);
+        if quiet {
+            presented_l1 = false;
+            should_show_l2 = false;
+            should_show_l3 = false;
+        } else {
+            // After wake, re-present L2/L3 panels (windows can be hidden across sleep).
+            // Do NOT re-fire L1 notifications unless wake actually transitioned into L1.
+            should_show_l2 = should_show_l2 || level_after == "L2";
+            should_show_l3 = should_show_l3 || (level_after == "L3" && !suppressed_l3_drm);
+            if level_before == "idle" && level_after != "idle" {
+                let reason = self
+                    .orch
+                    .last_transition
+                    .as_ref()
+                    .map(|t| t.reason.clone())
+                    .unwrap_or_else(|| "wake".into());
+                self.record_new_nudge_session(&day, "idle", &reason, None);
+            }
         }
         PipelineStepResult {
             capture: None,
@@ -324,7 +347,7 @@ impl<'a> Pipeline<'a> {
             presented_l1,
             should_show_l2,
             should_show_l3,
-            suppressed_l3_drm,
+            suppressed_l3_drm: quiet || suppressed_l3_drm,
         }
     }
 

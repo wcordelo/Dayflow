@@ -255,4 +255,17 @@ fn e2e_tick_budgets_and_drm_holds_progression() {
     assert!(!held.should_show_l2);
     assert!(!held.should_show_l3);
     assert_eq!(pipe.settings.nudges_fired_today, 1);
+
+    // Sleep then wake while still on DRM: capture stays paused; Wake runs but UI stays quiet.
+    pipe.sleep_lock();
+    assert!(capture.pause_capture.load(std::sync::atomic::Ordering::SeqCst));
+    let woke = pipe.wake();
+    assert!(
+        capture.pause_capture.load(std::sync::atomic::Ordering::SeqCst),
+        "DRM focus must keep capture paused after unlock"
+    );
+    assert_eq!(woke.level_after, "L1");
+    assert!(!woke.presented_l1);
+    assert!(!woke.should_show_l2);
+    assert!(!woke.should_show_l3);
 }
