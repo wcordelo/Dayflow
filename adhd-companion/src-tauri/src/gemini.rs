@@ -54,8 +54,8 @@ impl GeminiClient {
 impl LlmClient for GeminiClient {
     fn complete(&self, system: &str, user: &str) -> Result<LlmResponse, String> {
         let url = format!(
-            "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent?key={}",
-            self.model, self.api_key
+            "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent",
+            self.model
         );
         let body = json!({
             "system_instruction": { "parts": [{ "text": system }] },
@@ -64,6 +64,7 @@ impl LlmClient for GeminiClient {
         });
         let resp = ureq::post(&url)
             .set("Content-Type", "application/json")
+            .set("x-goog-api-key", &self.api_key)
             .send_json(body)
             .map_err(|e| format!("gemini http: {e}"))?;
         let v: serde_json::Value = resp.into_json().map_err(|e| format!("gemini json: {e}"))?;

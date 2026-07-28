@@ -331,6 +331,7 @@ fn update_settings(
 
 #[tauri::command]
 fn pause_nudges(
+    app: tauri::AppHandle,
     state: tauri::State<'_, Arc<AppState>>,
     minutes: i64,
 ) -> Result<AppSettings, String> {
@@ -352,7 +353,15 @@ fn pause_nudges(
         let mut orch = state.orch.lock();
         orch.guards.paused = true;
         orch.guards.cooldown_until_unix = Some(until);
+        orchestrator::reduce(
+            &mut orch,
+            OrchEvent::Acknowledge {
+                reason: "pause".into(),
+            },
+            now_unix(),
+        );
     }
+    nudge_windows::hide_nudge_windows(&app)?;
     Ok(snapshot)
 }
 
@@ -380,6 +389,7 @@ fn pause_watching(state: tauri::State<'_, Arc<AppState>>) -> Result<AppSettings,
 
 #[tauri::command]
 fn overwhelm_until_boundary(
+    app: tauri::AppHandle,
     state: tauri::State<'_, Arc<AppState>>,
 ) -> Result<AppSettings, String> {
     let until = next_day_boundary_unix(now_unix());
@@ -392,8 +402,19 @@ fn overwhelm_until_boundary(
         .lock()
         .persist_to_db(&s)
         .map_err(|e| e.to_string())?;
-    state.orch.lock().guards.overwhelm = true;
-    state.orch.lock().guards.paused = true;
+    {
+        let mut orch = state.orch.lock();
+        orch.guards.overwhelm = true;
+        orch.guards.paused = true;
+        orchestrator::reduce(
+            &mut orch,
+            OrchEvent::Acknowledge {
+                reason: "overwhelm".into(),
+            },
+            now_unix(),
+        );
+    }
+    nudge_windows::hide_nudge_windows(&app)?;
     Ok(s)
 }
 
