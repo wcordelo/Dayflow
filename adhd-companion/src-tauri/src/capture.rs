@@ -196,11 +196,12 @@ impl CaptureService {
         let file_path = if redacted {
             None
         } else {
-            Some(self.write_frame(db, &event, &bytes)?)
+            Some(self.write_frame(db, &event, &bytes, now_unix)?)
         };
 
         let id = db
             .insert_screenshot(
+                now_unix,
                 &event.trigger,
                 event.bundle_id.as_deref(),
                 event.window_title.as_deref(),
@@ -227,13 +228,14 @@ impl CaptureService {
         db: &Database,
         event: &CaptureEvent,
         bytes: &[u8],
+        captured_at: i64,
     ) -> Result<String, String> {
-        let day = crate::day_boundary::logical_day_key(crate::day_boundary::now_unix());
+        let day = crate::day_boundary::logical_day_key(captured_at);
         let dir = db.root.join("screenshots").join(&day);
         fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
         let name = format!(
             "{}_{}.jpg",
-            crate::day_boundary::now_unix(),
+            captured_at,
             &uuid::Uuid::new_v4().to_string()[..8]
         );
         let path = dir.join(&name);

@@ -40,7 +40,7 @@ fn presentation_flags(
     (presented_l1, should_show_l2, should_show_l3)
 }
 
-fn quiet_nudges_for_drm(
+fn quiet_nudges_for_privacy(
     capture: &CaptureResult,
     focus_bundle: Option<&str>,
     rules: &crate::privacy::PrivacyRules,
@@ -53,6 +53,9 @@ fn quiet_nudges_for_drm(
         // pause_watching and DRM both skip with this reason; either must silence
         // the monitor for the duration of the skip (leaving DRM clears the flag).
         PrivacyDecision::Skip { reason } if reason == "pause_watching_or_drm" => true,
+        // Private browsing: pixels were intentionally not stored — no nudges either.
+        PrivacyDecision::Skip { reason } if reason == "incognito" => true,
+        PrivacyDecision::Redact { reason } if reason == "incognito" => true,
         _ => false,
     }
 }
@@ -174,11 +177,12 @@ impl<'a> Pipeline<'a> {
         let rules = self.capture.rules.read().clone();
         let suppressed_l3_drm =
             should_suppress_l3_for_focus(self.focus.bundle_id.as_deref(), &rules);
-        let quiet_drm = quiet_nudges_for_drm(&capture, self.focus.bundle_id.as_deref(), &rules);
+        let quiet_privacy =
+            quiet_nudges_for_privacy(&capture, self.focus.bundle_id.as_deref(), &rules);
 
         let mut presented_l1 = false;
-        let monitor = if quiet_drm {
-            // DRM / streaming focus: no alignment monitor, no nudge entry.
+        let monitor = if quiet_privacy {
+            // DRM / streaming / incognito: no alignment monitor, no nudge entry.
             None
         } else {
             let ctx = CaptureContext {

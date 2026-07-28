@@ -269,3 +269,60 @@ fn e2e_tick_budgets_and_drm_holds_progression() {
     assert!(!woke.should_show_l2);
     assert!(!woke.should_show_l3);
 }
+
+#[test]
+fn e2e_incognito_skip_does_not_run_monitor() {
+    let dir = tempdir().unwrap();
+    let db = Database::open(dir.path()).unwrap();
+    let mut settings = AppSettings {
+        onboarding_complete: true,
+        gemini_analysis_opt_in: false,
+        daily_nudge_budget: 20,
+        nudges_fired_today: 0,
+        quiet_hours_start: None,
+        quiet_hours_end: None,
+        ignore_incognito: true,
+        ..AppSettings::default()
+    };
+    let capture = CaptureService::new();
+    capture.set_rules(default_rules_from_settings(&settings));
+    capture.start();
+    db.replace_priorities(
+        &logical_day_key(now_unix()),
+        &["Write grant proposal".into()],
+        "checkin",
+    )
+    .unwrap();
+
+    let mut orch = OrchestratorState::default();
+    orch.guards.minutes_since_last_nudge = Some(60);
+    orch.guards.min_minutes_between_nudges = 0;
+    let mut focus = FocusContext::default();
+    let mut last_nudge = None;
+    let mut pipe = Pipeline {
+        db: &db,
+        capture: &capture,
+        orch: &mut orch,
+        settings: &mut settings,
+        focus: &mut focus,
+        data_dir: dir.path(),
+        last_nudge_present_unix: &mut last_nudge,
+    };
+
+    let step = pipe
+        .ingest_capture(CaptureEvent {
+            trigger: "app_switch".into(),
+            bundle_id: Some("com.google.Chrome".into()),
+            window_title: Some("Secret - Incognito".into()),
+            browser_url: None,
+            idle_seconds: Some(1.0),
+            jpeg_base64: None,
+            accessibility_text: None,
+            frame_hash: Some("incog".into()),
+        })
+        .unwrap();
+    assert!(step.capture.as_ref().unwrap().skipped);
+    assert!(step.monitor.is_none());
+    assert_eq!(step.level_after, "idle");
+    assert!(!pipe.orch.pending_drift);
+}

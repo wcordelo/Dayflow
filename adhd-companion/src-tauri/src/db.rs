@@ -119,6 +119,7 @@ impl Database {
 
     pub fn insert_screenshot(
         &self,
+        captured_at: i64,
         trigger: &str,
         bundle: Option<&str>,
         title: Option<&str>,
@@ -130,7 +131,6 @@ impl Database {
         idle_seconds: Option<f64>,
         browser_url: Option<&str>,
     ) -> Result<i64, DbError> {
-        let captured_at = now_unix();
         let day = logical_day_key(captured_at);
         self.conn.execute(
             "INSERT INTO screenshots (
@@ -383,5 +383,35 @@ mod tests {
             .unwrap();
         let ps = db.list_priorities("2024-06-15").unwrap();
         assert_eq!(ps.len(), 2);
+    }
+
+    #[test]
+    fn insert_screenshot_uses_provided_clock() {
+        let dir = tempdir().unwrap();
+        let db = Database::open(dir.path()).unwrap();
+        // 2024-06-15 12:00 UTC — well after 4 AM local may vary; use a fixed unix
+        // and assert the stored captured_at matches exactly (day key derived from it).
+        let captured_at = 1_718_452_800;
+        let id = db
+            .insert_screenshot(
+                captured_at,
+                "app_switch",
+                Some("com.apple.Safari"),
+                Some("Docs"),
+                None,
+                false,
+                None,
+                None,
+                Some("hash"),
+                Some(1.0),
+                None,
+            )
+            .unwrap();
+        let day = logical_day_key(captured_at);
+        let shots = db.list_screenshots(&day, 10).unwrap();
+        assert_eq!(shots.len(), 1);
+        assert_eq!(shots[0].id, id);
+        assert_eq!(shots[0].captured_at, captured_at);
+        assert_eq!(shots[0].day, day);
     }
 }
