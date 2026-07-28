@@ -457,3 +457,150 @@ fn e2e_dispatch_event_budgets_idle_to_l1() {
     assert_eq!(pipe.settings.nudges_fired_today, 1);
     assert!(pipe.last_nudge_present_unix.is_some());
 }
+
+#[test]
+fn e2e_hash_dedupe_skips_monitor_and_budget() {
+    let dir = tempdir().unwrap();
+    let db = Database::open(dir.path()).unwrap();
+    let mut settings = AppSettings {
+        onboarding_complete: true,
+        gemini_analysis_opt_in: false,
+        daily_nudge_budget: 20,
+        nudges_fired_today: 0,
+        quiet_hours_start: None,
+        quiet_hours_end: None,
+        ..AppSettings::default()
+    };
+    let capture = CaptureService::new();
+    capture.set_rules(default_rules_from_settings(&settings));
+    capture.start();
+    db.replace_priorities(
+        &logical_day_key(now_unix()),
+        &["Write grant proposal".into()],
+        "checkin",
+    )
+    .unwrap();
+
+    let mut orch = OrchestratorState::default();
+    orch.guards.minutes_since_last_nudge = Some(60);
+    orch.guards.min_minutes_between_nudges = 0;
+    orch.pending_drift = true;
+    orch.pending_drift_since_unix = Some(now_unix() - 30);
+    orch.pending_confidence = Some(Confidence::High);
+
+    let mut focus = FocusContext::default();
+    let mut last_nudge = None;
+    let mut pipe = Pipeline {
+        db: &db,
+        capture: &capture,
+        orch: &mut orch,
+        settings: &mut settings,
+        focus: &mut focus,
+        data_dir: dir.path(),
+        last_nudge_present_unix: &mut last_nudge,
+    };
+
+    let first = pipe
+        .ingest_capture(CaptureEvent {
+            trigger: "app_switch".into(),
+            bundle_id: Some("com.apple.Safari".into()),
+            window_title: Some("Random tab".into()),
+            browser_url: None,
+            idle_seconds: Some(1.0),
+            jpeg_base64: None,
+            accessibility_text: None,
+            frame_hash: Some("a".into()),
+        })
+        .unwrap();
+    assert!(!first.capture.as_ref().unwrap().skipped);
+    assert!(first.monitor.is_some());
+    assert_eq!(first.level_after, "L1");
+    assert_eq!(pipe.settings.nudges_fired_today, 1);
+
+    // Re-arm pending while still inside capture debounce window — a skipped
+    // frame must not run the monitor or spend another budget unit.
+    pipe.orch.level = NudgeLevel::Idle;
+    pipe.orch.escalate_after_unix = None;
+    pipe.orch.pending_drift = true;
+    pipe.orch.pending_drift_since_unix = Some(now_unix() - 30);
+    pipe.orch.pending_confidence = Some(Confidence::High);
+    let second = pipe
+        .ingest_capture(CaptureEvent {
+            trigger: "app_switch".into(),
+            bundle_id: Some("com.apple.Safari".into()),
+            window_title: Some("Random tab".into()),
+            browser_url: None,
+            idle_seconds: Some(1.0),
+            jpeg_base64: None,
+            accessibility_text: None,
+            frame_hash: Some("b".into()),
+        })
+        .unwrap();
+    assert!(second.capture.as_ref().unwrap().skipped);
+    assert!(second.monitor.is_none(), "skipped capture must not run monitor");
+    assert_eq!(second.level_after, "idle");
+    assert_eq!(pipe.settings.nudges_fired_today, 1);
+    assert!(pipe.orch.pending_drift);
+}
+
+#[test]
+fn e2e_idle_hash_dedupe_skips_monitor() {
+    let dir = tempdir().unwrap();
+    let db = Database::open(dir.path()).unwrap();
+    let mut settings = AppSettings {
+        onboarding_complete: true,
+        gemini_analysis_opt_in: false,
+        daily_nudge_budget: 20,
+        nudges_fired_today: 0,
+        quiet_hours_start: None,
+        quiet_hours_end: None,
+        ..AppSettings::default()
+    };
+    let capture = CaptureService::new();
+    capture.set_rules(default_rules_from_settings(&settings));
+    capture.start();
+    db.replace_priorities(
+        &logical_day_key(now_unix()),
+        &["Write grant proposal".into()],
+        "checkin",
+    )
+    .unwrap();
+
+    let mut orch = OrchestratorState::default();
+    orch.guards.minutes_since_last_nudge = Some(60);
+    orch.guards.min_minutes_between_nudges = 0;
+    let mut focus = FocusContext::default();
+    let mut last_nudge = None;
+    let mut pipe = Pipeline {
+        db: &db,
+        capture: &capture,
+        orch: &mut orch,
+        settings: &mut settings,
+        focus: &mut focus,
+        data_dir: dir.path(),
+        last_nudge_present_unix: &mut last_nudge,
+    };
+
+    let ev = CaptureEvent {
+        trigger: "idle_fallback".into(),
+        bundle_id: Some("com.spotify.client".into()),
+        window_title: Some("Discover".into()),
+        browser_url: None,
+        idle_seconds: Some(8.0),
+        jpeg_base64: None,
+        accessibility_text: None,
+        frame_hash: Some("same".into()),
+    };
+    let first = pipe.ingest_capture(ev.clone()).unwrap();
+    assert!(!first.capture.as_ref().unwrap().skipped);
+    assert!(first.monitor.is_some());
+
+    thread::sleep(Duration::from_millis(220));
+    pipe.orch.pending_drift = true;
+    pipe.orch.pending_drift_since_unix = Some(now_unix() - 30);
+    pipe.orch.pending_confidence = Some(Confidence::High);
+    let second = pipe.ingest_capture(ev).unwrap();
+    assert!(second.capture.as_ref().unwrap().deduped);
+    assert!(second.monitor.is_none());
+    assert!(pipe.orch.pending_drift);
+}

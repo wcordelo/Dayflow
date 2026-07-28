@@ -194,8 +194,10 @@ impl<'a> Pipeline<'a> {
             quiet_nudges_for_privacy(&capture, self.focus.bundle_id.as_deref(), &rules);
 
         let mut presented_l1 = false;
-        let monitor = if quiet_privacy {
-            // DRM / streaming / incognito: no alignment monitor, no nudge entry.
+        // Paired capture→monitor: only evaluate alignment when a screenshot row
+        // was written. debounce / hash_dedupe / capture_stopped must not budget.
+        let monitor = if quiet_privacy || capture.skipped {
+            // DRM / streaming / incognito / no stored frame: no monitor, no nudge entry.
             None
         } else {
             let ctx = CaptureContext {
