@@ -52,7 +52,16 @@ fn with_pipeline<R>(state: &AppState, f: impl FnOnce(&mut Pipeline<'_>) -> R) ->
         data_dir: &state.data_dir,
         last_nudge_present_unix: &mut last,
     };
-    f(&mut pipe)
+    let out = f(&mut pipe);
+    state::save_orchestrator(&db, &orch, *last);
+    out
+}
+
+fn persist_orch(state: &AppState) {
+    let db = state.db.lock();
+    let orch = state.orch.lock();
+    let last = state.last_nudge_present_unix.lock();
+    state::save_orchestrator(&db, &orch, *last);
 }
 
 #[tauri::command]
@@ -108,6 +117,7 @@ fn orch_dispatch(
     if next.level.as_str() == "idle" {
         let _ = nudge_windows::hide_nudge_windows(&app);
     }
+    persist_orch(&state);
     Ok(next)
 }
 
@@ -138,6 +148,7 @@ fn l1_notification_clicked(
     if next.level == orchestrator::NudgeLevel::L2 {
         let _ = nudge_windows::present_nudge_level(&app, "L2");
     }
+    persist_orch(&state);
     Ok(next)
 }
 
@@ -244,6 +255,7 @@ fn save_checkin(
             now_unix(),
         );
     }
+    persist_orch(&state);
     Ok(result)
 }
 
@@ -316,6 +328,7 @@ fn acknowledge_nudge(
         orch.clone()
     };
     nudge_windows::hide_nudge_windows(&app)?;
+    persist_orch(&state);
     Ok(next)
 }
 
@@ -401,6 +414,7 @@ fn apply_pause_nudges(
         );
     }
     nudge_windows::hide_nudge_windows(app)?;
+    persist_orch(state);
     Ok(snapshot)
 }
 
@@ -441,6 +455,7 @@ fn pause_watching(
         );
     }
     nudge_windows::hide_nudge_windows(&app)?;
+    persist_orch(&state);
     Ok(snapshot)
 }
 
@@ -471,6 +486,7 @@ fn overwhelm_until_boundary(
         );
     }
     nudge_windows::hide_nudge_windows(&app)?;
+    persist_orch(&state);
     Ok(s)
 }
 

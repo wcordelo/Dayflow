@@ -89,6 +89,7 @@ pub fn ensure_nudge_budget_day(
         settings.nudges_fired_today = 0;
         orch.l3_presentations_today = 0;
         orch.gentle_mode = false;
+        orch.consecutive_ignores = 0;
         let _ = db.set_setting("nudges_fired_today_day", logical_day);
         let _ = db.set_setting("nudges_fired_today", "0");
     }
@@ -161,5 +162,25 @@ mod tests {
     #[test]
     fn zoom_is_meeting() {
         assert!(meeting_heuristic(Some("us.zoom.xos"), Some("Zoom"), None));
+    }
+
+    #[test]
+    fn day_rollover_clears_ignore_streak() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = Database::open(dir.path()).unwrap();
+        let mut settings = AppSettings {
+            nudges_fired_today: 3,
+            ..AppSettings::default()
+        };
+        let mut orch = OrchestratorState::default();
+        orch.consecutive_ignores = 5;
+        orch.l3_presentations_today = 2;
+        orch.gentle_mode = true;
+        let _ = db.set_setting("nudges_fired_today_day", "2024-01-01");
+        ensure_nudge_budget_day(&mut settings, &db, "2024-01-02", &mut orch);
+        assert_eq!(settings.nudges_fired_today, 0);
+        assert_eq!(orch.consecutive_ignores, 0);
+        assert_eq!(orch.l3_presentations_today, 0);
+        assert!(!orch.gentle_mode);
     }
 }

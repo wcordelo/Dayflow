@@ -9,7 +9,43 @@ use serde::{Deserialize, Serialize};
 use crate::bus::EventBus;
 use crate::capture::CaptureService;
 use crate::db::{Database, DbError};
-use crate::orchestrator::OrchestratorState;
+use crate::orchestrator::{NudgeLevel, OrchestratorState};
+
+const ORCH_STATE_KEY: &str = "orchestrator_state_json";
+const LAST_NUDGE_KEY: &str = "last_nudge_present_unix";
+
+/// Persist wall-clock nudge machine + spacing so quit/crash can resume.
+pub fn save_orchestrator(
+    db: &Database,
+    orch: &OrchestratorState,
+    last_nudge_present_unix: Option<i64>,
+) {
+    if let Ok(json) = serde_json::to_string(orch) {
+        let _ = db.set_setting(ORCH_STATE_KEY, &json);
+    }
+    let _ = db.set_setting(
+        LAST_NUDGE_KEY,
+        &last_nudge_present_unix
+            .map(|v| v.to_string())
+            .unwrap_or_default(),
+    );
+}
+
+pub fn load_orchestrator(db: &Database) -> (OrchestratorState, Option<i64>) {
+    let mut orch = OrchestratorState::default();
+    if let Ok(Some(json)) = db.get_setting(ORCH_STATE_KEY) {
+        if let Ok(loaded) = serde_json::from_str::<OrchestratorState>(&json) {
+            orch = loaded;
+        }
+    }
+    let last = db
+        .get_setting(LAST_NUDGE_KEY)
+        .ok()
+        .flatten()
+        .filter(|s| !s.is_empty())
+        .and_then(|s| s.parse().ok());
+    (orch, last)
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppSettings {
@@ -262,14 +298,33 @@ impl AppState {
         s.hydrate_from_db(&db);
         let today = crate::day_boundary::logical_day_key(crate::day_boundary::now_unix());
         let stored_day = db.get_setting("nudges_fired_today_day").ok().flatten();
+        let (mut orch, last_nudge) = load_orchestrator(&db);
         if stored_day.as_deref() != Some(today.as_str()) {
             s.nudges_fired_today = 0;
+            orch.l3_presentations_today = 0;
+            orch.gentle_mode = false;
+            orch.consecutive_ignores = 0;
             let _ = db.set_setting("nudges_fired_today_day", &today);
             let _ = db.set_setting("nudges_fired_today", "0");
         }
+        let now = crate::day_boundary::now_unix();
+        if let Some(cd) = orch.cooldown_until_unix {
+            if now >= cd {
+                orch.cooldown_until_unix = None;
+                orch.guards.cooldown_until_unix = None;
+            }
+        }
+        // Stale L1/L2 sessions without a deadline fall back to idle on boot.
+        if matches!(orch.level, NudgeLevel::L1 | NudgeLevel::L2)
+            && orch.escalate_after_unix.is_none()
+        {
+            orch.level = NudgeLevel::Idle;
+            orch.level_entered_at_unix = None;
+        }
+        save_orchestrator(&db, &orch, last_nudge);
+
         let capture = CaptureService::new();
         capture.set_rules(crate::guards::default_rules_from_settings(&s));
-        let now = crate::day_boundary::now_unix();
         if s.pause_capture_until.map(|t| now < t).unwrap_or(false) {
             capture
                 .pause_capture
@@ -277,15 +332,46 @@ impl AppState {
         }
         Self {
             db: Mutex::new(db),
-            orch: Mutex::new(OrchestratorState::default()),
+            orch: Mutex::new(orch),
             capture,
             settings: Mutex::new(s),
             bus: EventBus::new(200),
             focus: Mutex::new(FocusContext::default()),
             runtime_stop: Arc::new(AtomicBool::new(false)),
-            last_nudge_present_unix: Mutex::new(None),
+            last_nudge_present_unix: Mutex::new(last_nudge),
             last_analyze_unix: Mutex::new(None),
             data_dir,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::day_boundary::now_unix;
+    use crate::orchestrator::{Confidence, NudgeLevel};
+    use tempfile::tempdir;
+
+    #[test]
+    fn orchestrator_survives_appstate_restart() {
+        let dir = tempdir().unwrap();
+        let db = Database::open(dir.path()).unwrap();
+        let today = crate::day_boundary::logical_day_key(now_unix());
+        let _ = db.set_setting("nudges_fired_today_day", &today);
+        let mut orch = OrchestratorState::default();
+        orch.level = NudgeLevel::L1;
+        orch.escalate_after_unix = Some(now_unix() + 500);
+        orch.pending_drift = false;
+        orch.consecutive_ignores = 2;
+        orch.pending_confidence = Some(Confidence::High);
+        let last = Some(now_unix() - 120);
+        save_orchestrator(&db, &orch, last);
+
+        let state = AppState::new(db, dir.path().to_path_buf());
+        let loaded = state.orch.lock().clone();
+        assert_eq!(loaded.level, NudgeLevel::L1);
+        assert_eq!(loaded.escalate_after_unix, orch.escalate_after_unix);
+        assert_eq!(loaded.consecutive_ignores, 2);
+        assert_eq!(*state.last_nudge_present_unix.lock(), last);
     }
 }

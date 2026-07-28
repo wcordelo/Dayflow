@@ -108,7 +108,9 @@ fn with_pipeline<R>(state: &AppState, f: impl FnOnce(&mut Pipeline<'_>) -> R) ->
         data_dir: &state.data_dir,
         last_nudge_present_unix: &mut last,
     };
-    f(&mut pipe)
+    let out = f(&mut pipe);
+    crate::state::save_orchestrator(&db, &orch, *last);
+    out
 }
 
 pub fn process_bus(app: &AppHandle, state: &Arc<AppState>) -> Result<(), String> {
