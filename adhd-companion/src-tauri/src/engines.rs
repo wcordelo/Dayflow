@@ -162,8 +162,9 @@ pub fn run_checkin(db: &Database, texts: Vec<String>) -> Result<CheckinResult, S
 }
 
 pub fn run_soft_confirm(db: &Database) -> Result<usize, String> {
-    let today = logical_day_key(now_unix());
-    let yesterday = logical_day_key(now_unix() - 24 * 3600);
+    let now = now_unix();
+    let today = logical_day_key(now);
+    let yesterday = crate::day_boundary::previous_logical_day_key(now);
     db.soft_confirm_carryover(&yesterday, &today)
         .map_err(|e| e.to_string())
 }

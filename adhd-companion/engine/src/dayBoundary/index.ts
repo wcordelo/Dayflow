@@ -69,12 +69,20 @@ export function logicalDayKey(
   let m = p.m;
   let d = p.d;
   if (p.h < boundaryHour) {
-    // Roll back one calendar day
-    const prev = new Date(Date.UTC(y, m, d));
-    prev.setUTCDate(prev.getUTCDate() - 1);
-    y = prev.getUTCFullYear();
-    m = prev.getUTCMonth();
-    d = prev.getUTCDate();
+    // Roll back one calendar day in the same calendar domain as `localParts`.
+    if (options.timezoneOffsetMinutes === undefined) {
+      const prev = new Date(y, m, d);
+      prev.setDate(prev.getDate() - 1);
+      y = prev.getFullYear();
+      m = prev.getMonth();
+      d = prev.getDate();
+    } else {
+      const prev = new Date(Date.UTC(y, m, d));
+      prev.setUTCDate(prev.getUTCDate() - 1);
+      y = prev.getUTCFullYear();
+      m = prev.getUTCMonth();
+      d = prev.getUTCDate();
+    }
   }
   return formatYmd(y, m, d);
 }
@@ -114,19 +122,26 @@ export function nextDayBoundaryUnix(
   if (unixSeconds < start) {
     return start;
   }
-  // Start of *next* logical day = this day's start + ~24h via day key + 1
+  // Start of *next* logical day = this day's start + 1 calendar day
   const key = logicalDayKey(unixSeconds, options);
   const [ys, ms, ds] = key.split("-").map((x) => Number(x));
   if (ys === undefined || ms === undefined || ds === undefined) {
     throw new Error(`Invalid day key: ${key}`);
   }
-  const next = new Date(Date.UTC(ys, ms - 1, ds));
-  next.setUTCDate(next.getUTCDate() + 1);
-  const nextKey = formatYmd(
-    next.getUTCFullYear(),
-    next.getUTCMonth(),
-    next.getUTCDate(),
-  );
+  let nextKey: string;
+  if (options.timezoneOffsetMinutes === undefined) {
+    const next = new Date(ys, ms - 1, ds);
+    next.setDate(next.getDate() + 1);
+    nextKey = formatYmd(next.getFullYear(), next.getMonth(), next.getDate());
+  } else {
+    const next = new Date(Date.UTC(ys, ms - 1, ds));
+    next.setUTCDate(next.getUTCDate() + 1);
+    nextKey = formatYmd(
+      next.getUTCFullYear(),
+      next.getUTCMonth(),
+      next.getUTCDate(),
+    );
+  }
   const boundaryHour = options.boundaryHour ?? DAY_BOUNDARY_HOUR;
   if (options.timezoneOffsetMinutes === undefined) {
     const [ny, nm, nd] = nextKey.split("-").map((x) => Number(x));

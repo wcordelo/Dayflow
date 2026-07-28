@@ -267,11 +267,10 @@ fn acknowledge_nudge(
             s.pause_nudges_until = Some(until);
             let snapshot = s.clone();
             drop(s);
-            state
-                .db
-                .lock()
-                .persist_to_db(&snapshot)
-                .map_err(|e| e.to_string())?;
+            {
+                let db = state.db.lock();
+                snapshot.persist_to_db(&db).map_err(|e| e.to_string())?;
+            }
         }
         let mut orch = state.orch.lock();
         orch.guards.overwhelm = true;
@@ -296,15 +295,7 @@ fn tick_orchestrator(
     state: tauri::State<'_, Arc<AppState>>,
 ) -> Result<OrchestratorState, String> {
     let step = with_pipeline(&state, |p| p.tick());
-    if step.should_show_l2 {
-        let _ = nudge_windows::present_nudge_level(&app, "L2");
-    }
-    if step.should_show_l3 {
-        let _ = nudge_windows::present_nudge_level(&app, "L3");
-    }
-    if step.level_after == "idle" {
-        let _ = nudge_windows::hide_nudge_windows(&app);
-    }
+    runtime::present_from_step(&app, &step);
     Ok(state.orch.lock().clone())
 }
 
@@ -340,11 +331,10 @@ fn pause_nudges(
     settings.pause_nudges_until = Some(until);
     let snapshot = settings.clone();
     drop(settings);
-    state
-        .db
-        .lock()
-        .persist_to_db(&snapshot)
-        .map_err(|e| e.to_string())?;
+    {
+        let db = state.db.lock();
+        snapshot.persist_to_db(&db).map_err(|e| e.to_string())?;
+    }
     state
         .capture
         .pause_nudges_only
@@ -371,11 +361,10 @@ fn pause_watching(state: tauri::State<'_, Arc<AppState>>) -> Result<AppSettings,
     settings.pause_capture_until = Some(now_unix() + 24 * 3600);
     let snapshot = settings.clone();
     drop(settings);
-    state
-        .db
-        .lock()
-        .persist_to_db(&snapshot)
-        .map_err(|e| e.to_string())?;
+    {
+        let db = state.db.lock();
+        snapshot.persist_to_db(&db).map_err(|e| e.to_string())?;
+    }
     state
         .capture
         .pause_nudges_only
@@ -397,11 +386,10 @@ fn overwhelm_until_boundary(
     s.overwhelm_until = Some(until);
     s.pause_nudges_until = Some(until);
     *state.settings.lock() = s.clone();
-    state
-        .db
-        .lock()
-        .persist_to_db(&s)
-        .map_err(|e| e.to_string())?;
+    {
+        let db = state.db.lock();
+        s.persist_to_db(&db).map_err(|e| e.to_string())?;
+    }
     {
         let mut orch = state.orch.lock();
         orch.guards.overwhelm = true;

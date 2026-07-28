@@ -10,7 +10,7 @@ use crate::gemini::{select_client, LlmClient};
 use crate::guards::{ensure_nudge_budget_day, sync_guards};
 use crate::monitor::{CaptureContext, MonitorResult};
 use crate::orchestrator::{NudgeLevel, OrchEvent, OrchestratorState};
-use crate::privacy::should_suppress_l3_for_focus;
+use crate::privacy::{should_suppress_l3_for_focus, PrivacyDecision};
 use crate::state::{AppSettings, FocusContext};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -23,6 +23,38 @@ pub struct PipelineStepResult {
     pub should_show_l2: bool,
     pub should_show_l3: bool,
     pub suppressed_l3_drm: bool,
+}
+
+/// Present L1/L2/L3 only on transitions into that level (not every tick).
+fn presentation_flags(
+    level_before: &str,
+    level_after: &str,
+    suppressed_l3_drm: bool,
+) -> (bool, bool, bool) {
+    let changed = level_before != level_after;
+    let presented_l1 = changed && level_after == "L1";
+    let should_show_l2 = changed && level_after == "L2";
+    let should_show_l3 = changed && level_after == "L3" && !suppressed_l3_drm;
+    (presented_l1, should_show_l2, should_show_l3)
+}
+
+fn quiet_nudges_for_drm(
+    capture: &CaptureResult,
+    focus_bundle: Option<&str>,
+    rules: &crate::privacy::PrivacyRules,
+) -> bool {
+    if should_suppress_l3_for_focus(focus_bundle, rules) {
+        return true;
+    }
+    match &capture.decision {
+        PrivacyDecision::PauseCapture { .. } => true,
+        PrivacyDecision::Skip { reason } if reason == "pause_watching_or_drm" => {
+            // Only quiet when focus is still a DRM/streaming app; pause-watching
+            // alone should not silence the monitor after leaving DRM.
+            should_suppress_l3_for_focus(focus_bundle, rules)
+        }
+        _ => false,
+    }
 }
 
 pub struct Pipeline<'a> {
@@ -68,23 +100,31 @@ impl<'a> Pipeline<'a> {
             self.settings.pause_capture_until,
             now,
         )?;
-        let mut presented_l1 = false;
 
-        let ctx = CaptureContext {
-            frontmost_bundle_id: event.bundle_id.clone(),
-            window_title: event.window_title.clone(),
-            browser_url: event.browser_url.clone(),
-            capture_trigger: Some(event.trigger.clone()),
-            idle_seconds: event.idle_seconds,
-        };
-        let m = run_monitor(self.db, self.orch, ctx)?;
-        if m.recommend_nudge
-            && self.orch.level != NudgeLevel::Idle
-            && level_before == "idle"
-        {
-            presented_l1 = self.orch.level == NudgeLevel::L1
-                || self.orch.level == NudgeLevel::L2;
-            if presented_l1 {
+        let rules = self.capture.rules.read().clone();
+        let suppressed_l3_drm =
+            should_suppress_l3_for_focus(self.focus.bundle_id.as_deref(), &rules);
+        let quiet_drm = quiet_nudges_for_drm(&capture, self.focus.bundle_id.as_deref(), &rules);
+
+        let mut presented_l1 = false;
+        let monitor = if quiet_drm {
+            // DRM / streaming focus: no alignment monitor, no nudge entry.
+            None
+        } else {
+            let ctx = CaptureContext {
+                frontmost_bundle_id: event.bundle_id.clone(),
+                window_title: event.window_title.clone(),
+                browser_url: event.browser_url.clone(),
+                capture_trigger: Some(event.trigger.clone()),
+                idle_seconds: event.idle_seconds,
+            };
+            let m = run_monitor(self.db, self.orch, ctx)?;
+            if m.recommend_nudge
+                && self.orch.level != NudgeLevel::Idle
+                && level_before == "idle"
+            {
+                // Budget once per new nudge session; L1 UI only when actually entering L1.
+                presented_l1 = self.orch.level == NudgeLevel::L1;
                 self.settings.nudges_fired_today += 1;
                 *self.last_nudge_present_unix = Some(now_unix());
                 let _ = self.db.set_setting(
@@ -105,22 +145,23 @@ impl<'a> Pipeline<'a> {
                     self.orch.escalate_after_unix,
                 );
             }
-        }
-        let monitor = Some(m);
+            Some(m)
+        };
 
-        let rules = self.capture.rules.read().clone();
-        let suppressed_l3_drm =
-            should_suppress_l3_for_focus(self.focus.bundle_id.as_deref(), &rules);
         let level_after = self.orch.level.as_str().to_string();
+        let (flag_l1, should_show_l2, should_show_l3) =
+            presentation_flags(&level_before, &level_after, suppressed_l3_drm);
+        // Prefer transition-based L1 flag; keep budget-path flag if set.
+        let presented_l1 = presented_l1 || flag_l1;
 
         Ok(PipelineStepResult {
             capture: Some(capture),
             monitor,
             level_before,
-            level_after: level_after.clone(),
+            level_after,
             presented_l1,
-            should_show_l2: level_after == "L2",
-            should_show_l3: level_after == "L3" && !suppressed_l3_drm,
+            should_show_l2,
+            should_show_l3,
             suppressed_l3_drm,
         })
     }
@@ -144,14 +185,16 @@ impl<'a> Pipeline<'a> {
         let suppressed_l3_drm =
             should_suppress_l3_for_focus(self.focus.bundle_id.as_deref(), &rules);
         let level_after = self.orch.level.as_str().to_string();
+        let (presented_l1, should_show_l2, should_show_l3) =
+            presentation_flags(&level_before, &level_after, suppressed_l3_drm);
         PipelineStepResult {
             capture: None,
             monitor: None,
             level_before,
-            level_after: level_after.clone(),
-            presented_l1: false,
-            should_show_l2: level_after == "L2",
-            should_show_l3: level_after == "L3" && !suppressed_l3_drm,
+            level_after,
+            presented_l1,
+            should_show_l2,
+            should_show_l3,
             suppressed_l3_drm,
         }
     }
@@ -165,16 +208,26 @@ impl<'a> Pipeline<'a> {
                 .store(false, std::sync::atomic::Ordering::SeqCst);
         }
         crate::orchestrator::reduce(self.orch, OrchEvent::Wake, now_unix());
+        let rules = self.capture.rules.read().clone();
+        let suppressed_l3_drm =
+            should_suppress_l3_for_focus(self.focus.bundle_id.as_deref(), &rules);
         let level_after = self.orch.level.as_str().to_string();
+        let (presented_l1, should_show_l2, should_show_l3) =
+            presentation_flags(&level_before, &level_after, suppressed_l3_drm);
+        // After wake, re-present the *current* escalation surface even if level did not
+        // change during reduce — unlock should restore L2/L3 without waiting for the next tick.
+        let should_show_l2 = should_show_l2 || level_after == "L2";
+        let should_show_l3 = should_show_l3 || (level_after == "L3" && !suppressed_l3_drm);
+        let presented_l1 = presented_l1 || level_after == "L1";
         PipelineStepResult {
             capture: None,
             monitor: None,
             level_before,
             level_after,
-            presented_l1: false,
-            should_show_l2: false,
-            should_show_l3: false,
-            suppressed_l3_drm: false,
+            presented_l1,
+            should_show_l2,
+            should_show_l3,
+            suppressed_l3_drm,
         }
     }
 

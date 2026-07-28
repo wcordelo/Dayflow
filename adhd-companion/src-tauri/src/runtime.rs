@@ -80,28 +80,14 @@ pub fn start_runtime(app: AppHandle, state: Arc<AppState>) {
                         settings.gemini_analysis_opt_in,
                     )
                 };
-                let _ = match client.as_ref() {
-                    Some(llm) => {
-                        let prep = {
-                            let db = state_an.db.lock();
-                            crate::engines::prepare_analyze_for_llm(&db, None)
-                        };
-                        match prep {
-                            Ok(crate::engines::PrepareAnalyzeOutcome::Complete(r)) => Ok(r),
-                            Ok(crate::engines::PrepareAnalyzeOutcome::Pending(p)) => {
-                                let llm_out = llm.complete(&p.system, &p.user);
-                                let db = state_an.db.lock();
-                                crate::engines::finish_analyze_for_llm(&db, p, llm_out)
-                            }
-                            Err(e) => Err(e),
-                        }
-                    }
-                    None => {
-                        let db = state_an.db.lock();
-                        crate::engines::run_analyze(&db, None)
-                    }
+                let result = {
+                    let db = state_an.db.lock();
+                    crate::engines::run_analyze_with_llm(&db, None, client.as_ref())
                 };
-                *state_an.last_analyze_unix.lock() = Some(now);
+                // Only advance the schedule on success so transient failures retry soon.
+                if result.is_ok() {
+                    *state_an.last_analyze_unix.lock() = Some(now);
+                }
             }
         }
     });
@@ -201,8 +187,8 @@ fn emit_and_process(
     Ok(())
 }
 
-fn present_from_step(app: &AppHandle, step: &PipelineStepResult) {
-    if step.level_before != step.level_after && step.level_after == "L1" {
+pub(crate) fn present_from_step(app: &AppHandle, step: &PipelineStepResult) {
+    if step.presented_l1 || (step.level_before != step.level_after && step.level_after == "L1") {
         let _ = present_nudge_level(app, "L1");
     }
     if step.should_show_l2 {

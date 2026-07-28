@@ -127,14 +127,17 @@ impl Database {
         redact_reason: Option<&str>,
         accessibility_text: Option<&str>,
         frame_hash: Option<&str>,
+        idle_seconds: Option<f64>,
+        browser_url: Option<&str>,
     ) -> Result<i64, DbError> {
         let captured_at = now_unix();
         let day = logical_day_key(captured_at);
         self.conn.execute(
             "INSERT INTO screenshots (
                 captured_at, day, file_path, capture_trigger, frontmost_bundle_id,
-                window_title, accessibility_text, text_source, frame_hash, redacted, redact_reason
-             ) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)",
+                window_title, accessibility_text, text_source, frame_hash, redacted, redact_reason,
+                idle_seconds_at_capture, browser_url
+             ) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
             params![
                 captured_at,
                 day,
@@ -151,6 +154,8 @@ impl Database {
                 frame_hash,
                 if redacted { 1 } else { 0 },
                 redact_reason,
+                idle_seconds,
+                browser_url,
             ],
         )?;
         Ok(self.conn.last_insert_rowid())

@@ -29,4 +29,11 @@ describe("dayBoundary 4AM", () => {
     expect(logicalDayKey(next, eastern)).toBe("2024-06-16");
     expect(next).toBeGreaterThan(mid);
   });
+
+  it("host-local rollback does not mix UTC Date.UTC with local Y/M/D", () => {
+    // Construct a local pre-boundary instant via Date components.
+    const localPre = new Date(2024, 5, 15, 3, 30, 0, 0);
+    const unix = Math.floor(localPre.getTime() / 1000);
+    expect(logicalDayKey(unix)).toBe("2024-06-14");
+  });
 });

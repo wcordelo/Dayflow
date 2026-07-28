@@ -209,6 +209,8 @@ impl CaptureService {
                 reason,
                 event.accessibility_text.as_deref(),
                 event.frame_hash.as_deref(),
+                event.idle_seconds,
+                event.browser_url.as_deref(),
             )
             .map_err(|e| e.to_string())?;
 

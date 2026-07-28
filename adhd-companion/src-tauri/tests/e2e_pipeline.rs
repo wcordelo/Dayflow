@@ -15,6 +15,8 @@ fn e2e_capture_monitor_escalate_analyze_brief() {
         gemini_analysis_opt_in: false,
         daily_nudge_budget: 20,
         nudges_fired_today: 0,
+        quiet_hours_start: None,
+        quiet_hours_end: None,
         ..AppSettings::default()
     };
 
