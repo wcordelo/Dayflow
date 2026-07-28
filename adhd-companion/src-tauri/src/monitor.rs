@@ -37,10 +37,12 @@ const STRONG_DRIFT_BUNDLES: &[&str] = &[
     "com.reddit.Reddit",
     "com.twitter.twitter-mac",
     "ru.keepcoder.Telegram",
+    "org.whispersystems.signal-desktop",
 ];
 
 const STRONG_DRIFT_TITLE: &[&str] = &[
-    "youtube", "twitter", "x.com", "instagram", "tiktok", "reddit", "facebook", "netflix", "twitch",
+    "youtube", "twitter", "x.com", "instagram", "tiktok", "reddit", "facebook", "netflix", "hulu",
+    "twitch",
 ];
 
 const ANCHORS: &[&str] = &["app_switch", "window_focus", "idle_return"];
@@ -173,5 +175,27 @@ mod tests {
         );
         assert_eq!(r.confidence, Confidence::Low);
         assert!(!r.recommend_nudge);
+    }
+
+    #[test]
+    fn signal_desktop_matches_ts_strong_drift_list() {
+        let priorities = [Priority {
+            id: 1,
+            text: "Write proposal".into(),
+            status: "active".into(),
+        }];
+        let r = evaluate_alignment(
+            &CaptureContext {
+                frontmost_bundle_id: Some("org.whispersystems.signal-desktop".into()),
+                window_title: Some("Alice".into()),
+                browser_url: None,
+                capture_trigger: Some("app_switch".into()),
+                idle_seconds: Some(1.0),
+            },
+            &priorities,
+        );
+        assert_eq!(r.verdict, "drift");
+        assert!(r.recommend_nudge);
+        assert!(r.evidence.iter().any(|e| e == "drift_bundle"));
     }
 }
