@@ -68,48 +68,45 @@ impl<'a> Pipeline<'a> {
             self.settings.pause_capture_until,
             now,
         )?;
-        let mut monitor = None;
         let mut presented_l1 = false;
 
-        if !capture.skipped {
-            let ctx = CaptureContext {
-                frontmost_bundle_id: event.bundle_id.clone(),
-                window_title: event.window_title.clone(),
-                browser_url: event.browser_url.clone(),
-                capture_trigger: Some(event.trigger.clone()),
-                idle_seconds: event.idle_seconds,
-            };
-            let m = run_monitor(self.db, self.orch, ctx)?;
-            if m.recommend_nudge
-                && self.orch.level != NudgeLevel::Idle
-                && level_before == "idle"
-            {
-                presented_l1 = self.orch.level == NudgeLevel::L1
-                    || self.orch.level == NudgeLevel::L2;
-                if presented_l1 {
-                    self.settings.nudges_fired_today += 1;
-                    *self.last_nudge_present_unix = Some(now_unix());
-                    let _ = self.db.set_setting(
-                        "nudges_fired_today",
-                        &self.settings.nudges_fired_today.to_string(),
-                    );
-                    let _ = self.db.log_nudge_event(
-                        &day,
-                        self.orch.level.as_str(),
-                        Some("idle"),
-                        "present",
-                        Some("monitor_drift"),
-                        Some(match m.confidence {
-                            crate::orchestrator::Confidence::Low => "low",
-                            crate::orchestrator::Confidence::Medium => "medium",
-                            crate::orchestrator::Confidence::High => "high",
-                        }),
-                        self.orch.escalate_after_unix,
-                    );
-                }
+        let ctx = CaptureContext {
+            frontmost_bundle_id: event.bundle_id.clone(),
+            window_title: event.window_title.clone(),
+            browser_url: event.browser_url.clone(),
+            capture_trigger: Some(event.trigger.clone()),
+            idle_seconds: event.idle_seconds,
+        };
+        let m = run_monitor(self.db, self.orch, ctx)?;
+        if m.recommend_nudge
+            && self.orch.level != NudgeLevel::Idle
+            && level_before == "idle"
+        {
+            presented_l1 = self.orch.level == NudgeLevel::L1
+                || self.orch.level == NudgeLevel::L2;
+            if presented_l1 {
+                self.settings.nudges_fired_today += 1;
+                *self.last_nudge_present_unix = Some(now_unix());
+                let _ = self.db.set_setting(
+                    "nudges_fired_today",
+                    &self.settings.nudges_fired_today.to_string(),
+                );
+                let _ = self.db.log_nudge_event(
+                    &day,
+                    self.orch.level.as_str(),
+                    Some("idle"),
+                    "present",
+                    Some("monitor_drift"),
+                    Some(match m.confidence {
+                        crate::orchestrator::Confidence::Low => "low",
+                        crate::orchestrator::Confidence::Medium => "medium",
+                        crate::orchestrator::Confidence::High => "high",
+                    }),
+                    self.orch.escalate_after_unix,
+                );
             }
-            monitor = Some(m);
         }
+        let monitor = Some(m);
 
         let rules = self.capture.rules.read().clone();
         let suppressed_l3_drm =

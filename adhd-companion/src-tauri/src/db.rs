@@ -233,6 +233,16 @@ impl Database {
         Ok(active.len())
     }
 
+    /// Mark existing analyze-batch cards replaced before a new slow-path run (sliding-window).
+    pub fn replace_analyze_timeline_cards(&self, day: &str) -> Result<(), DbError> {
+        self.conn.execute(
+            "UPDATE timeline_cards SET status = 'replaced', updated_at = ?2
+             WHERE day = ?1 AND status = 'active' AND (category IS NULL OR category = 'local')",
+            params![day, now_unix()],
+        )?;
+        Ok(())
+    }
+
     pub fn insert_timeline_card(
         &self,
         day: &str,

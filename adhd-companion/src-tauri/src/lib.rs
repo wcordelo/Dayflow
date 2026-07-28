@@ -375,7 +375,6 @@ fn pause_watching(state: tauri::State<'_, Arc<AppState>>) -> Result<AppSettings,
         .capture
         .pause_capture
         .store(true, std::sync::atomic::Ordering::SeqCst);
-    state.orch.lock().guards.paused = true;
     Ok(snapshot)
 }
 

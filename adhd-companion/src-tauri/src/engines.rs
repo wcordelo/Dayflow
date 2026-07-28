@@ -47,6 +47,9 @@ pub fn run_analyze(db: &Database, day: Option<&str>) -> Result<AnalyzeBatchResul
         });
     }
 
+    db.replace_analyze_timeline_cards(&day)
+        .map_err(|e| e.to_string())?;
+
     // Group by bundle for a simple local card (Gemini path plugs in later)
     use std::collections::BTreeMap;
     let mut by_bundle: BTreeMap<String, Vec<&crate::db::ScreenshotRow>> = BTreeMap::new();

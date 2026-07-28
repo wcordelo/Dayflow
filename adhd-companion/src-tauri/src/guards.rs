@@ -111,11 +111,7 @@ pub fn sync_guards(
         .pause_nudges_until
         .map(|t| now_unix < t)
         .unwrap_or(false);
-    let capture_paused = settings
-        .pause_capture_until
-        .map(|t| now_unix < t)
-        .unwrap_or(false);
-    state.guards.paused = nudges_paused || capture_paused;
+    state.guards.paused = nudges_paused;
     state.guards.overwhelm = settings
         .overwhelm_until
         .map(|t| now_unix < t)
@@ -124,19 +120,10 @@ pub fn sync_guards(
     state.guards.daily_budget_remaining = settings.daily_nudge_budget - settings.nudges_fired_today;
     state.guards.confidence_threshold = confidence_threshold(settings.aggressiveness);
     state.guards.cooldown_until_unix = state.cooldown_until_unix;
-    let mut cooldown = None;
     if let Some(until) = settings.pause_nudges_until {
         if now_unix < until {
-            cooldown = Some(until);
+            state.guards.cooldown_until_unix = Some(until);
         }
-    }
-    if let Some(until) = settings.pause_capture_until {
-        if now_unix < until {
-            cooldown = Some(cooldown.map_or(until, |c| c.max(until)));
-        }
-    }
-    if let Some(until) = cooldown {
-        state.guards.cooldown_until_unix = Some(until);
     }
 }
 
