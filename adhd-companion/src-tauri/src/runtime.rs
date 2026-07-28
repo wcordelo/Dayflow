@@ -204,6 +204,20 @@ pub(crate) fn present_from_step(app: &AppHandle, step: &PipelineStepResult) {
     }
 }
 
+/// After quit/crash restore, re-show the matching L1/L2/L3 surface so the
+/// orchestrator is never elevated without a user-visible nudge.
+pub fn restore_nudge_ui_after_boot(app: &AppHandle, state: &AppState) {
+    let level = state.orch.lock().level.as_str().to_string();
+    match level.as_str() {
+        "L1" | "L2" | "L3" => {
+            let _ = present_nudge_level(app, &level);
+        }
+        _ => {
+            let _ = hide_nudge_windows(app);
+        }
+    }
+}
+
 pub fn stop_runtime(state: &AppState) {
     state.runtime_stop.store(true, Ordering::SeqCst);
 }

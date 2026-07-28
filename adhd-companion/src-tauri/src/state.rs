@@ -333,6 +333,15 @@ impl AppState {
         if let Some(t) = last_nudge {
             orch.guards.minutes_since_last_nudge = Some(((now - t) / 60).max(0));
         }
+        // Catch up L1→L2→L3 escalations that elapsed while the app was quit.
+        // UI re-presentation happens in setup once the AppHandle exists.
+        if orch.level != NudgeLevel::Idle {
+            crate::orchestrator::reduce(
+                &mut orch,
+                crate::orchestrator::OrchEvent::Tick,
+                now,
+            );
+        }
         save_orchestrator(&db, &orch, last_nudge);
 
         let capture = CaptureService::new();
@@ -385,6 +394,63 @@ mod tests {
         assert_eq!(loaded.escalate_after_unix, orch.escalate_after_unix);
         assert_eq!(loaded.consecutive_ignores, 2);
         assert_eq!(*state.last_nudge_present_unix.lock(), last);
+    }
+
+    #[test]
+    fn boot_keeps_l2_and_escalates_past_deadline() {
+        let dir = tempdir().unwrap();
+        let db = Database::open(dir.path()).unwrap();
+        let today = crate::day_boundary::logical_day_key(now_unix());
+        let _ = db.set_setting("nudges_fired_today_day", &today);
+        // Disable default quiet hours so boot Tick catch-up is not cancelled.
+        let _ = db.set_setting("quiet_hours_start", "");
+        let _ = db.set_setting("quiet_hours_end", "");
+        db.replace_priorities(&today, &["Write grant proposal".into()], "checkin")
+            .unwrap();
+        let now = now_unix();
+
+        let mut live = OrchestratorState::default();
+        live.level = NudgeLevel::L2;
+        live.escalate_after_unix = Some(now + 600);
+        live.level_entered_at_unix = Some(now - 60);
+        save_orchestrator(&db, &live, Some(now - 120));
+        let state = AppState::new(
+            Database::open(dir.path()).unwrap(),
+            dir.path().to_path_buf(),
+        );
+        assert_eq!(state.orch.lock().level, NudgeLevel::L2);
+
+        let mut overdue = OrchestratorState::default();
+        overdue.level = NudgeLevel::L1;
+        overdue.escalate_after_unix = Some(now - 1);
+        overdue.level_entered_at_unix = Some(now - 900);
+        overdue.guards.min_minutes_between_nudges = 0;
+        overdue.guards.minutes_since_last_nudge = Some(60);
+        save_orchestrator(&db, &overdue, Some(now - 3600));
+        let state2 = AppState::new(db, dir.path().to_path_buf());
+        assert_eq!(
+            state2.orch.lock().level,
+            NudgeLevel::L2,
+            "past L1 escalate_after must catch up on boot"
+        );
+    }
+
+    #[test]
+    fn boot_preserves_l3_session() {
+        let dir = tempdir().unwrap();
+        let db = Database::open(dir.path()).unwrap();
+        let today = crate::day_boundary::logical_day_key(now_unix());
+        let _ = db.set_setting("nudges_fired_today_day", &today);
+        let _ = db.set_setting("quiet_hours_start", "");
+        let _ = db.set_setting("quiet_hours_end", "");
+        let mut orch = OrchestratorState::default();
+        orch.level = NudgeLevel::L3;
+        orch.escalate_after_unix = None;
+        orch.l3_presentations_today = 1;
+        save_orchestrator(&db, &orch, Some(now_unix() - 30));
+        let state = AppState::new(db, dir.path().to_path_buf());
+        assert_eq!(state.orch.lock().level, NudgeLevel::L3);
+        assert_eq!(state.orch.lock().l3_presentations_today, 1);
     }
 
     #[test]

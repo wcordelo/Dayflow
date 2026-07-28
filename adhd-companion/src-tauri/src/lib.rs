@@ -600,6 +600,8 @@ pub fn run() {
             // Align OS login-item with persisted preference on boot.
             apply_autostart_preference(app.handle(), app_state.settings.lock().autostart);
             runtime::start_runtime(app.handle().clone(), app_state.clone());
+            // Re-present any elevated nudge restored from SQLite (quit/crash).
+            runtime::restore_nudge_ui_after_boot(app.handle(), &app_state);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
