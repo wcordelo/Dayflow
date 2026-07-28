@@ -339,15 +339,26 @@ fn update_settings(
     state: tauri::State<'_, Arc<AppState>>,
     patch: AppSettings,
 ) -> Result<AppSettings, String> {
+    // Settings UI sends a full snapshot; preserve runtime-owned counters / clocks
+    // so a stale refresh cannot rewind daily budget or wipe an active pause.
+    let merged = {
+        let current = state.settings.lock();
+        let mut merged = patch;
+        merged.nudges_fired_today = current.nudges_fired_today;
+        merged.pause_nudges_until = current.pause_nudges_until;
+        merged.pause_capture_until = current.pause_capture_until;
+        merged.overwhelm_until = current.overwhelm_until;
+        merged
+    };
     {
         let db = state.db.lock();
-        patch.persist_to_db(&db).map_err(|e| e.to_string())?;
+        merged.persist_to_db(&db).map_err(|e| e.to_string())?;
     }
     state
         .capture
-        .set_rules(guards::default_rules_from_settings(&patch));
-    *state.settings.lock() = patch.clone();
-    Ok(patch)
+        .set_rules(guards::default_rules_from_settings(&merged));
+    *state.settings.lock() = merged.clone();
+    Ok(merged)
 }
 
 #[tauri::command]

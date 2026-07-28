@@ -136,17 +136,18 @@ pub fn run_monitor(
                 );
             }
         }
-    } else {
-        // unknown / low-confidence drift that will not nudge — clear stale pending
-        // so a later anchor cannot fire from an outdated drift observation.
+    } else if result.verdict == "drift" {
+        // Explicit low-confidence drift observation — clear pending (orch rule).
         crate::orchestrator::reduce(
             state,
             OrchEvent::DriftDetected {
-                confidence: Confidence::Low,
+                confidence: result.confidence,
             },
             now,
         );
     }
+    // verdict == "unknown": leave pending alone so anchor-cap / later anchors
+    // can still fire from an earlier actionable drift.
     Ok(result)
 }
 
@@ -311,4 +312,70 @@ pub fn run_brief_with_llm(
         }
     }
     Ok(brief)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    #[test]
+    fn unknown_monitor_preserves_pending_drift() {
+        let dir = tempdir().unwrap();
+        let db = Database::open(dir.path()).unwrap();
+        let day = logical_day_key(now_unix());
+        db.replace_priorities(&day, &["Write grant proposal".into()], "checkin")
+            .unwrap();
+
+        let mut orch = OrchestratorState::default();
+        orch.pending_drift = true;
+        orch.pending_drift_since_unix = Some(now_unix() - 30);
+        orch.pending_confidence = Some(Confidence::High);
+
+        let result = run_monitor(
+            &db,
+            &mut orch,
+            CaptureContext {
+                frontmost_bundle_id: Some("com.apple.Safari".into()),
+                window_title: Some("Random tab".into()),
+                browser_url: None,
+                capture_trigger: Some("idle_fallback".into()),
+                idle_seconds: Some(1.0),
+            },
+        )
+        .unwrap();
+        assert_eq!(result.verdict, "unknown");
+        assert!(orch.pending_drift);
+        assert_eq!(orch.pending_confidence, Some(Confidence::High));
+    }
+
+    #[test]
+    fn low_confidence_drift_clears_pending() {
+        let dir = tempdir().unwrap();
+        let db = Database::open(dir.path()).unwrap();
+        let day = logical_day_key(now_unix());
+        db.replace_priorities(&day, &["Write grant proposal".into()], "checkin")
+            .unwrap();
+
+        let mut orch = OrchestratorState::default();
+        orch.pending_drift = true;
+        orch.pending_drift_since_unix = Some(now_unix() - 30);
+        orch.pending_confidence = Some(Confidence::High);
+
+        let result = run_monitor(
+            &db,
+            &mut orch,
+            CaptureContext {
+                frontmost_bundle_id: Some("com.spotify.client".into()),
+                window_title: Some("Discover".into()),
+                browser_url: None,
+                capture_trigger: None,
+                idle_seconds: Some(1.0),
+            },
+        )
+        .unwrap();
+        assert_eq!(result.verdict, "drift");
+        assert!(!result.recommend_nudge);
+        assert!(!orch.pending_drift);
+    }
 }

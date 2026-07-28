@@ -623,9 +623,12 @@ export default function App() {
             <button
               className="primary"
               onClick={async () => {
-                await invoke("update_settings", { patch: settings });
+                // Backend preserves nudges_fired_today / pause clocks from a stale snapshot.
+                const saved = await invoke<Settings>("update_settings", {
+                  patch: settings,
+                });
+                setSettings(saved);
                 setMessage("Settings saved.");
-                await refresh();
               }}
             >
               Save settings
