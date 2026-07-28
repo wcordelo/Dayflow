@@ -62,4 +62,17 @@ describe("privacy suite", () => {
     expect(shouldSuppressL3ForFocus("com.netflix.Netflix", rules)).toBe(true);
     expect(shouldSuppressL3ForFocus("com.apple.Safari", rules)).toBe(false);
   });
+
+  it("treats Spotify as allow (distraction), not DRM — mirrors Rust defaults", () => {
+    expect(
+      evaluatePrivacy(
+        {
+          frontmostBundleId: "com.spotify.client",
+          windowTitle: "Discover Weekly",
+        },
+        rules,
+      ),
+    ).toEqual({ action: "allow" });
+    expect(shouldSuppressL3ForFocus("com.spotify.client", rules)).toBe(false);
+  });
 });

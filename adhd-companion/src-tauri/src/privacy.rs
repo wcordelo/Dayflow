@@ -25,6 +25,8 @@ impl Default for PrivacyRules {
                 "org.mozilla.firefox".into(),
                 "com.microsoft.edgemac".into(),
             ],
+            // Streaming video DRM — pause capture / suppress L3.
+            // Spotify is a distraction signal (monitor), not DRM — keep lists mirrored with TS.
             drm_bundle_ids: vec![
                 "com.netflix.Netflix".into(),
                 "com.apple.TV".into(),
@@ -154,6 +156,21 @@ mod tests {
         let rules = PrivacyRules::default();
         let d = evaluate_privacy(Some("com.netflix.Netflix"), Some("Netflix"), &rules);
         assert!(matches!(d, PrivacyDecision::PauseCapture { .. }));
+    }
+
+    #[test]
+    fn spotify_is_not_drm() {
+        let rules = PrivacyRules::default();
+        let d = evaluate_privacy(
+            Some("com.spotify.client"),
+            Some("Discover Weekly"),
+            &rules,
+        );
+        assert!(matches!(d, PrivacyDecision::Allow));
+        assert!(!should_suppress_l3_for_focus(
+            Some("com.spotify.client"),
+            &rules
+        ));
     }
 
     #[test]

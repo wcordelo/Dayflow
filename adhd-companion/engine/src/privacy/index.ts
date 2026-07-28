@@ -40,6 +40,7 @@ export const DEFAULT_BROWSER_BUNDLES = [
   "com.microsoft.edgemac",
 ] as const;
 
+/** Streaming video DRM — pause capture / suppress L3. Spotify is distraction, not DRM. */
 export const DEFAULT_DRM_BUNDLES = [
   "com.netflix.Netflix",
   "com.apple.TV",
@@ -47,7 +48,6 @@ export const DEFAULT_DRM_BUNDLES = [
   "com.hulu.plus",
   "com.amazon.aiv.AIVApp",
   "tv.twitch.desktop",
-  "com.spotify.client", // audio/video DRM-ish; pause escalation over playback focus
 ] as const;
 
 export const DEFAULT_INCOGNITO_MARKERS = [

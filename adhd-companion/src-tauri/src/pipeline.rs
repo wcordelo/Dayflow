@@ -211,6 +211,24 @@ impl<'a> Pipeline<'a> {
                 .pause_capture
                 .store(false, std::sync::atomic::Ordering::SeqCst);
         }
+        // Match tick/ingest: re-evaluate budget + guards after sleep (quiet hours,
+        // meeting, pause, spacing can all change across a lid-close interval).
+        let day = logical_day_key(now_unix());
+        ensure_nudge_budget_day(self.settings, self.db, &day, self.orch);
+        let priorities = self.db.list_priorities(&day).unwrap_or_default();
+        sync_guards(
+            self.orch,
+            self.settings,
+            priorities.iter().filter(|p| p.status == "active").count() as u32,
+            self.focus.bundle_id.as_deref(),
+            self.focus.title.as_deref(),
+            self.focus.url.as_deref(),
+            now_unix(),
+        );
+        if let Some(last) = *self.last_nudge_present_unix {
+            self.orch.guards.minutes_since_last_nudge =
+                Some(((now_unix() - last) / 60).max(0));
+        }
         crate::orchestrator::reduce(self.orch, OrchEvent::Wake, now_unix());
         let rules = self.capture.rules.read().clone();
         let suppressed_l3_drm =
