@@ -48,11 +48,9 @@ fn quiet_nudges_for_drm(
     }
     match &capture.decision {
         PrivacyDecision::PauseCapture { .. } => true,
-        PrivacyDecision::Skip { reason } if reason == "pause_watching_or_drm" => {
-            // Only quiet when focus is still a DRM/streaming app; pause-watching
-            // alone should not silence the monitor after leaving DRM.
-            should_suppress_l3_for_focus(focus_bundle, rules)
-        }
+        // pause_watching and DRM both skip with this reason; either must silence
+        // the monitor for the duration of the skip (leaving DRM clears the flag).
+        PrivacyDecision::Skip { reason } if reason == "pause_watching_or_drm" => true,
         _ => false,
     }
 }

@@ -214,9 +214,12 @@ fn transition(state: &mut OrchestratorState, to: NudgeLevel, now: i64, reason: &
 }
 
 fn enter_cooldown(state: &mut OrchestratorState, now: i64, reason: &str) {
+    // Mirror TS enterCooldown: pause/overwhelm keep a pre-set deadline on
+    // guards.cooldown_until_unix (set by pause_nudges / pause_watching / overwhelm).
     let cooldown = match reason {
         "doing_it" => Some(now + COOLDOWN_DOING_IT_SECS),
         "snooze" => Some(now + COOLDOWN_SNOOZE_SECS),
+        "pause" | "overwhelm" => state.guards.cooldown_until_unix,
         _ => None,
     };
     transition(state, NudgeLevel::Idle, now, reason);
@@ -506,5 +509,38 @@ mod tests {
         );
         assert_eq!(s.level, NudgeLevel::Idle);
         assert_eq!(s.cooldown_until_unix, Some(10 + COOLDOWN_DOING_IT_SECS));
+    }
+
+    #[test]
+    fn pause_acknowledge_preserves_pre_set_deadline() {
+        let mut s = OrchestratorState::default();
+        reduce(
+            &mut s,
+            OrchEvent::DriftDetected {
+                confidence: Confidence::High,
+            },
+            0,
+        );
+        reduce(
+            &mut s,
+            OrchEvent::EventAnchor {
+                anchor: "app_switch".into(),
+            },
+            0,
+        );
+        assert_eq!(s.level, NudgeLevel::L1);
+        let until = 10 + 30 * 60;
+        s.guards.cooldown_until_unix = Some(until);
+        s.guards.paused = true;
+        reduce(
+            &mut s,
+            OrchEvent::Acknowledge {
+                reason: "pause".into(),
+            },
+            10,
+        );
+        assert_eq!(s.level, NudgeLevel::Idle);
+        assert_eq!(s.cooldown_until_unix, Some(until));
+        assert_eq!(s.guards.cooldown_until_unix, Some(until));
     }
 }

@@ -394,9 +394,15 @@ fn apply_pause_nudges(
 }
 
 #[tauri::command]
-fn pause_watching(state: tauri::State<'_, Arc<AppState>>) -> Result<AppSettings, String> {
+fn pause_watching(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<AppSettings, String> {
+    // UI contract: pause watching stops capture *and* nudges (24h).
+    let until = now_unix() + 24 * 3600;
     let mut settings = state.settings.lock();
-    settings.pause_capture_until = Some(now_unix() + 24 * 3600);
+    settings.pause_capture_until = Some(until);
+    settings.pause_nudges_until = Some(until);
     let snapshot = settings.clone();
     drop(settings);
     {
@@ -411,6 +417,19 @@ fn pause_watching(state: tauri::State<'_, Arc<AppState>>) -> Result<AppSettings,
         .capture
         .pause_capture
         .store(true, std::sync::atomic::Ordering::SeqCst);
+    {
+        let mut orch = state.orch.lock();
+        orch.guards.paused = true;
+        orch.guards.cooldown_until_unix = Some(until);
+        orchestrator::reduce(
+            &mut orch,
+            OrchEvent::Acknowledge {
+                reason: "pause".into(),
+            },
+            now_unix(),
+        );
+    }
+    nudge_windows::hide_nudge_windows(&app)?;
     Ok(snapshot)
 }
 

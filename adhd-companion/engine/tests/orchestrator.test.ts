@@ -94,6 +94,24 @@ describe("orchestrator state machine", () => {
     );
   });
 
+  it("pause acknowledge preserves pre-set cooldown deadline", () => {
+    const clock = mutableClock(5_000);
+    let state = createInitialState();
+    state = reduce(state, { type: "drift_detected", confidence: "high" }, clock);
+    state = reduce(state, { type: "event_anchor", anchor: "app_switch" }, clock);
+    const until = 5_000 + 30 * 60;
+    state = reduce(
+      state,
+      { type: "set_guards", guards: { paused: true, cooldownUntilUnix: until } },
+      clock,
+    );
+    state = reduce(state, { type: "acknowledge", reason: "pause" }, clock);
+    expect(state.level).toBe("idle");
+    expect(state.cooldownUntilUnix).toBe(until);
+    expect(state.guards.cooldownUntilUnix).toBe(until);
+    expect(state.cooldownKind).toBe("pause");
+  });
+
   it("wake does not leap L1→L3; cancels if guards fail", () => {
     const clock = mutableClock(10_000);
     let state = createInitialState();
