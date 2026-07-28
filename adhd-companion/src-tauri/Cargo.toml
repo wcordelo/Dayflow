@@ -4,10 +4,15 @@ version = "0.1.0"
 description = "ADHD nudge companion for macOS (Tauri v2)"
 authors = ["ADHD Companion contributors"]
 edition = "2021"
+default-run = "adhd-companion"
 
 [lib]
 name = "adhd_companion_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "adhd-companion"
+path = "src/main.rs"
 
 [[bin]]
 name = "e2e_harness"

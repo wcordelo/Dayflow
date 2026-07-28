@@ -1,6 +1,7 @@
 node_modules/
 engine/node_modules/
 dist/
+dist-app/
 *.tsbuildinfo
 .DS_Store
 coverage/

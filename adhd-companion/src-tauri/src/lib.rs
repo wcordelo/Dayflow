@@ -58,13 +58,6 @@ fn with_pipeline<R>(state: &AppState, f: impl FnOnce(&mut Pipeline<'_>) -> R) ->
     out
 }
 
-fn persist_orch(state: &AppState) {
-    let db = state.db.lock();
-    let orch = state.orch.lock();
-    let last = state.last_nudge_present_unix.lock();
-    state::save_orchestrator(&db, &orch, *last);
-}
-
 #[tauri::command]
 fn get_status(state: tauri::State<'_, Arc<AppState>>) -> serde_json::Value {
     let orch = state.orch.lock();
@@ -205,20 +198,16 @@ fn save_checkin(
     state: tauri::State<'_, Arc<AppState>>,
     priorities: Vec<String>,
 ) -> Result<engines::CheckinResult, String> {
-    let db = state.db.lock();
-    let result = run_checkin(&db, priorities)?;
-    drop(db);
-    {
-        let mut orch = state.orch.lock();
-        orchestrator::reduce(
-            &mut orch,
-            OrchEvent::Acknowledge {
-                reason: "priorities_changed".into(),
-            },
-            now_unix(),
-        );
-    }
-    persist_orch(&state);
+    let result = {
+        let db = state.db.lock();
+        run_checkin(&db, priorities)?
+    };
+    // Route through Pipeline so priorities_changed writes nudge_events (same as acks).
+    let _ = with_pipeline(&state, |p| {
+        p.dispatch_event(OrchEvent::Acknowledge {
+            reason: "priorities_changed".into(),
+        })
+    });
     Ok(result)
 }
 

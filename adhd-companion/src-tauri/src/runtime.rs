@@ -5,6 +5,7 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
+use chrono::Timelike;
 use tauri::AppHandle;
 
 use crate::bus::BusEvent;
@@ -88,6 +89,34 @@ pub fn start_runtime(app: AppHandle, state: Arc<AppState>) {
                 if result.is_ok() {
                     *state_an.last_analyze_unix.lock() = Some(now);
                 }
+            }
+        }
+    });
+
+    // Morning check-in: at/after checkin_hour, auto soft-confirm yesterday's
+    // priorities once per logical day so nudges are not stuck on no_priorities.
+    let stop4 = state.runtime_stop.clone();
+    let state_checkin = state.clone();
+    thread::spawn(move || {
+        while !stop4.load(Ordering::SeqCst) {
+            thread::sleep(Duration::from_secs(60));
+            if stop4.load(Ordering::SeqCst) {
+                break;
+            }
+            if !state_checkin.settings.lock().onboarding_complete {
+                continue;
+            }
+            let (hour, checkin_hour) = {
+                let s = state_checkin.settings.lock();
+                (chrono::Local::now().hour(), s.checkin_hour)
+            };
+            let carried = {
+                let db = state_checkin.db.lock();
+                crate::engines::maybe_auto_soft_confirm(&db, checkin_hour, hour).unwrap_or(0)
+            };
+            if carried > 0 {
+                // Refresh active_priority_count via a no-op tick sync.
+                let _ = with_pipeline(&state_checkin, |p| p.tick());
             }
         }
     });

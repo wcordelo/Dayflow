@@ -11,41 +11,7 @@ pub fn key_path(data_dir: &Path) -> PathBuf {
     data_dir.join("secrets").join("gemini_api_key")
 }
 
-pub fn store_gemini_key(data_dir: &Path, key: &str) -> Result<(), String> {
-    let key = key.trim();
-    if key.is_empty() {
-        return Err("empty key".into());
-    }
-    #[cfg(target_os = "macos")]
-    {
-        // Prefer Keychain when the security CLI is available; fall back to 0600 file.
-        use std::io::Write;
-        use std::process::{Command, Stdio};
-        let status = Command::new("security")
-            .args([
-                "add-generic-password",
-                "-a",
-                "adhd-companion",
-                "-s",
-                "com.adhdcompanion.app.gemini",
-                "-U",
-            ])
-            .stdin(Stdio::piped())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
-            .and_then(|mut child| {
-                if let Some(stdin) = child.stdin.as_mut() {
-                    stdin.write_all(key.as_bytes())?;
-                }
-                child.wait()
-            });
-        if let Ok(s) = status {
-            if s.success() {
-                return Ok(());
-            }
-        }
-    }
+fn store_gemini_key_file(data_dir: &Path, key: &str) -> Result<(), String> {
     let path = key_path(data_dir);
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| e.to_string())?;
@@ -60,26 +26,85 @@ pub fn store_gemini_key(data_dir: &Path, key: &str) -> Result<(), String> {
     Ok(())
 }
 
-pub fn load_gemini_key(data_dir: &Path) -> Option<String> {
+pub fn store_gemini_key(data_dir: &Path, key: &str) -> Result<(), String> {
+    let key = key.trim();
+    if key.is_empty() {
+        return Err("empty key".into());
+    }
     #[cfg(target_os = "macos")]
     {
-        if let Ok(out) = std::process::Command::new("security")
+        // Prefer Keychain; require -w (stdin-only prompts are non-TTY and can exit 0
+        // without a retrievable secret). Verify round-trip before skipping the file fallback.
+        use std::process::Command;
+        let status = Command::new("security")
             .args([
-                "find-generic-password",
+                "add-generic-password",
                 "-a",
                 "adhd-companion",
                 "-s",
                 "com.adhdcompanion.app.gemini",
                 "-w",
+                key,
+                "-U",
             ])
-            .output()
-        {
-            if out.status.success() {
-                let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
-                if !s.is_empty() {
-                    return Some(s);
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status();
+        if let Ok(s) = status {
+            if s.success() {
+                if load_gemini_key_from_keychain().as_deref() == Some(key) {
+                    // Drop any stale file copy so Keychain remains the sole source.
+                    let path = key_path(data_dir);
+                    let _ = fs::remove_file(path);
+                    return Ok(());
                 }
             }
+        }
+        // Stale/unreadable Keychain entries must not shadow the file fallback.
+        let _ = Command::new("security")
+            .args([
+                "delete-generic-password",
+                "-a",
+                "adhd-companion",
+                "-s",
+                "com.adhdcompanion.app.gemini",
+            ])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status();
+    }
+    store_gemini_key_file(data_dir, key)
+}
+
+#[cfg(target_os = "macos")]
+fn load_gemini_key_from_keychain() -> Option<String> {
+    let out = std::process::Command::new("security")
+        .args([
+            "find-generic-password",
+            "-a",
+            "adhd-companion",
+            "-s",
+            "com.adhdcompanion.app.gemini",
+            "-w",
+        ])
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    if s.is_empty() {
+        None
+    } else {
+        Some(s)
+    }
+}
+
+pub fn load_gemini_key(data_dir: &Path) -> Option<String> {
+    #[cfg(target_os = "macos")]
+    {
+        if let Some(s) = load_gemini_key_from_keychain() {
+            return Some(s);
         }
     }
     let path = key_path(data_dir);

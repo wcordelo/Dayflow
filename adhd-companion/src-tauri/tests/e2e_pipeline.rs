@@ -678,3 +678,151 @@ fn e2e_app_blocklist_redact_skips_monitor() {
     assert_eq!(held.level_after, "idle");
     assert!(!held.presented_l1);
 }
+
+fn drift_event(hash: &str) -> CaptureEvent {
+    CaptureEvent {
+        trigger: "app_switch".into(),
+        bundle_id: Some("com.spotify.client".into()),
+        window_title: Some("YouTube Music — hits".into()),
+        browser_url: None,
+        idle_seconds: Some(1.0),
+        jpeg_base64: None,
+        accessibility_text: None,
+        frame_hash: Some(hash.into()),
+    }
+}
+
+#[test]
+fn e2e_no_priorities_blocks_then_checkin_unlocks_nudges() {
+    let dir = tempdir().unwrap();
+    let db = Database::open(dir.path()).unwrap();
+    let mut settings = AppSettings {
+        onboarding_complete: true,
+        gemini_analysis_opt_in: false,
+        daily_nudge_budget: 20,
+        nudges_fired_today: 0,
+        quiet_hours_start: None,
+        quiet_hours_end: None,
+        ..AppSettings::default()
+    };
+    let capture = CaptureService::new();
+    capture.set_rules(default_rules_from_settings(&settings));
+    capture.start();
+
+    let mut orch = OrchestratorState::default();
+    orch.guards.minutes_since_last_nudge = Some(60);
+    orch.guards.min_minutes_between_nudges = 0;
+    orch.guards.active_priority_count = 0;
+
+    let mut focus = FocusContext::default();
+    let mut last_nudge = None;
+    let mut pipe = Pipeline {
+        db: &db,
+        capture: &capture,
+        orch: &mut orch,
+        settings: &mut settings,
+        focus: &mut focus,
+        data_dir: dir.path(),
+        last_nudge_present_unix: &mut last_nudge,
+    };
+
+    let blocked = pipe.ingest_capture(drift_event("np1")).unwrap();
+    assert_eq!(
+        blocked.level_after, "idle",
+        "no_priorities must block L1, got {}",
+        blocked.level_after
+    );
+    assert_eq!(pipe.settings.nudges_fired_today, 0);
+
+    let checkin = run_checkin(&db, vec!["Write grant proposal".into()]).unwrap();
+    assert_eq!(checkin.priorities_saved, 1);
+    assert!(!checkin.soft_confirm_offered);
+
+    // priorities_changed via pipeline (same path as save_checkin command)
+    let before = db.count_nudge_events().unwrap();
+    let _ = pipe.dispatch_event(OrchEvent::Acknowledge {
+        reason: "priorities_changed".into(),
+    });
+    assert!(db.count_nudge_events().unwrap() > before);
+
+    thread::sleep(Duration::from_millis(220));
+    let unlocked = pipe.ingest_capture(drift_event("np2")).unwrap();
+    assert!(
+        matches!(unlocked.level_after.as_str(), "L1" | "L2"),
+        "after checkin, drift should fire, got {}",
+        unlocked.level_after
+    );
+}
+
+#[test]
+fn e2e_soft_confirm_auto_unlocks_nudge_loop() {
+    let dir = tempdir().unwrap();
+    let db = Database::open(dir.path()).unwrap();
+    let now = now_unix();
+    let yesterday = previous_logical_day_key(now);
+    db.replace_priorities(
+        &yesterday,
+        &["Write grant proposal".into(), "Email advisor".into()],
+        "checkin",
+    )
+    .unwrap();
+    assert!(soft_confirm_available(&db).unwrap());
+
+    let carried = maybe_auto_soft_confirm(&db, 0, 12).unwrap();
+    assert_eq!(carried, 2);
+    assert!(!soft_confirm_available(&db).unwrap());
+
+    let mut settings = AppSettings {
+        onboarding_complete: true,
+        gemini_analysis_opt_in: false,
+        daily_nudge_budget: 20,
+        nudges_fired_today: 0,
+        quiet_hours_start: None,
+        quiet_hours_end: None,
+        checkin_hour: 9,
+        ..AppSettings::default()
+    };
+    let capture = CaptureService::new();
+    capture.set_rules(default_rules_from_settings(&settings));
+    capture.start();
+
+    let mut orch = OrchestratorState::default();
+    orch.guards.minutes_since_last_nudge = Some(60);
+    orch.guards.min_minutes_between_nudges = 0;
+
+    let mut focus = FocusContext::default();
+    let mut last_nudge = None;
+    let mut pipe = Pipeline {
+        db: &db,
+        capture: &capture,
+        orch: &mut orch,
+        settings: &mut settings,
+        focus: &mut focus,
+        data_dir: dir.path(),
+        last_nudge_present_unix: &mut last_nudge,
+    };
+
+    thread::sleep(Duration::from_millis(220));
+    let drift = pipe.ingest_capture(drift_event("sc1")).unwrap();
+    assert!(
+        matches!(drift.level_after.as_str(), "L1" | "L2"),
+        "soft-confirm carryover must unlock nudges, got {}",
+        drift.level_after
+    );
+
+    // Escalate L1→L2→L3 and ack — full morning loop after auto check-in
+    if pipe.orch.level == NudgeLevel::L1 {
+        pipe.orch.escalate_after_unix = Some(now_unix() - 1);
+        assert_eq!(pipe.tick().level_after, "L2");
+    }
+    if pipe.orch.level == NudgeLevel::L2 {
+        pipe.orch.escalate_after_unix = Some(now_unix() - 1);
+        assert_eq!(pipe.tick().level_after, "L3");
+    }
+    let before = db.count_nudge_events().unwrap();
+    let ack = pipe.dispatch_event(OrchEvent::Acknowledge {
+        reason: "doing_it".into(),
+    });
+    assert_eq!(ack.level_after, "idle");
+    assert!(db.count_nudge_events().unwrap() > before);
+}

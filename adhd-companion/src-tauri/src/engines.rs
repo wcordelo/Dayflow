@@ -192,15 +192,36 @@ pub struct CheckinResult {
     pub prompt_excerpt: String,
 }
 
+pub fn soft_confirm_available(db: &Database) -> Result<bool, String> {
+    let now = now_unix();
+    let today = logical_day_key(now);
+    let yesterday = crate::day_boundary::previous_logical_day_key(now);
+    let today_prios = db.list_priorities(&today).map_err(|e| e.to_string())?;
+    if today_prios.iter().any(|p| p.status == "active") {
+        return Ok(false);
+    }
+    let prev = db.list_priorities(&yesterday).map_err(|e| e.to_string())?;
+    Ok(prev
+        .iter()
+        .any(|p| p.status == "active" || p.status == "carried"))
+}
+
 pub fn run_checkin(db: &Database, texts: Vec<String>) -> Result<CheckinResult, String> {
     let prompt = load_prompt("checkin")?;
     let day = logical_day_key(now_unix());
+    let offered = soft_confirm_available(db)?;
     db.replace_priorities(&day, &texts, "checkin")
         .map_err(|e| e.to_string())?;
+    let priorities_saved = texts.iter().filter(|t| !t.trim().is_empty()).count();
+    if priorities_saved > 0 {
+        let _ = db.set_setting("last_checkin_day", &day);
+    }
     Ok(CheckinResult {
         day,
-        priorities_saved: texts.iter().filter(|t| !t.trim().is_empty()).count(),
-        soft_confirm_offered: false,
+        priorities_saved,
+        // True when yesterday had carryable priorities *before* this save — UI can
+        // still surface soft-confirm on an empty morning draft.
+        soft_confirm_offered: offered && priorities_saved == 0,
         prompt_excerpt: prompt.chars().take(120).collect(),
     })
 }
@@ -209,8 +230,43 @@ pub fn run_soft_confirm(db: &Database) -> Result<usize, String> {
     let now = now_unix();
     let today = logical_day_key(now);
     let yesterday = crate::day_boundary::previous_logical_day_key(now);
-    db.soft_confirm_carryover(&yesterday, &today)
-        .map_err(|e| e.to_string())
+    let n = db
+        .soft_confirm_carryover(&yesterday, &today)
+        .map_err(|e| e.to_string())?;
+    if n > 0 {
+        let _ = db.set_setting("last_checkin_day", &today);
+    }
+    Ok(n)
+}
+
+/// Once per logical day at/after `checkin_hour`, carry yesterday's priorities forward
+/// so the `no_priorities` guard does not block the whole day of nudges.
+pub fn maybe_auto_soft_confirm(db: &Database, checkin_hour: u32, hour_now: u32) -> Result<usize, String> {
+    if hour_now < checkin_hour {
+        return Ok(0);
+    }
+    let today = logical_day_key(now_unix());
+    if db
+        .get_setting("last_checkin_day")
+        .map_err(|e| e.to_string())?
+        .as_deref()
+        == Some(today.as_str())
+    {
+        return Ok(0);
+    }
+    if !soft_confirm_available(db)? {
+        // Mark the day handled so we don't spin; user may still save a fresh check-in.
+        if db
+            .list_priorities(&today)
+            .map_err(|e| e.to_string())?
+            .iter()
+            .any(|p| p.status == "active")
+        {
+            let _ = db.set_setting("last_checkin_day", &today);
+        }
+        return Ok(0);
+    }
+    run_soft_confirm(db)
 }
 
 pub fn run_brief(db: &Database, day: Option<&str>) -> Result<crate::db::BriefPayload, String> {
@@ -638,5 +694,54 @@ mod tests {
             assert!(body.len() > 80, "{name} too short");
         }
         assert!(load_prompt("does-not-exist").is_err());
+    }
+
+    #[test]
+    fn soft_confirm_available_and_auto_carryover() {
+        let dir = tempdir().unwrap();
+        let db = Database::open(dir.path()).unwrap();
+        let now = now_unix();
+        let yesterday = crate::day_boundary::previous_logical_day_key(now);
+        let today = logical_day_key(now);
+
+        assert!(!soft_confirm_available(&db).unwrap());
+        db.replace_priorities(&yesterday, &["Ship M0".into(), "Email mentor".into()], "checkin")
+            .unwrap();
+        assert!(soft_confirm_available(&db).unwrap());
+
+        // Before checkin_hour: no-op
+        assert_eq!(maybe_auto_soft_confirm(&db, 23, 8).unwrap(), 0);
+        assert!(db.list_priorities(&today).unwrap().is_empty());
+
+        let n = maybe_auto_soft_confirm(&db, 8, 9).unwrap();
+        assert_eq!(n, 2);
+        assert_eq!(db.list_priorities(&today).unwrap().len(), 2);
+        assert!(!soft_confirm_available(&db).unwrap());
+
+        // Idempotent for the day
+        assert_eq!(maybe_auto_soft_confirm(&db, 8, 10).unwrap(), 0);
+    }
+
+    #[test]
+    fn run_checkin_marks_day_and_clears_soft_confirm_offer() {
+        let dir = tempdir().unwrap();
+        let db = Database::open(dir.path()).unwrap();
+        let now = now_unix();
+        let yesterday = crate::day_boundary::previous_logical_day_key(now);
+        db.replace_priorities(&yesterday, &["Old prio".into()], "checkin")
+            .unwrap();
+
+        let empty = run_checkin(&db, vec![]).unwrap();
+        assert!(empty.soft_confirm_offered);
+        assert_eq!(empty.priorities_saved, 0);
+        assert!(db.get_setting("last_checkin_day").unwrap().is_none());
+
+        let saved = run_checkin(&db, vec!["New focus".into()]).unwrap();
+        assert!(!saved.soft_confirm_offered);
+        assert_eq!(saved.priorities_saved, 1);
+        assert_eq!(
+            db.get_setting("last_checkin_day").unwrap().as_deref(),
+            Some(saved.day.as_str())
+        );
     }
 }
