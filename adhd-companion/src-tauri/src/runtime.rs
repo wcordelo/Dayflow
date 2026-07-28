@@ -73,13 +73,34 @@ pub fn start_runtime(app: AppHandle, state: Arc<AppState>) {
                 }
             };
             if due && state_an.settings.lock().onboarding_complete {
-                let db = state_an.db.lock();
-                let settings = state_an.settings.lock();
-                let client = crate::gemini::select_client(
-                    &state_an.data_dir,
-                    settings.gemini_analysis_opt_in,
-                );
-                let _ = crate::engines::run_analyze_with_llm(&db, None, client.as_ref());
+                let client = {
+                    let settings = state_an.settings.lock();
+                    crate::gemini::select_client(
+                        &state_an.data_dir,
+                        settings.gemini_analysis_opt_in,
+                    )
+                };
+                let _ = match client.as_ref() {
+                    Some(llm) => {
+                        let prep = {
+                            let db = state_an.db.lock();
+                            crate::engines::prepare_analyze_for_llm(&db, None)
+                        };
+                        match prep {
+                            Ok(crate::engines::PrepareAnalyzeOutcome::Complete(r)) => Ok(r),
+                            Ok(crate::engines::PrepareAnalyzeOutcome::Pending(p)) => {
+                                let llm_out = llm.complete(&p.system, &p.user);
+                                let db = state_an.db.lock();
+                                crate::engines::finish_analyze_for_llm(&db, p, llm_out)
+                            }
+                            Err(e) => Err(e),
+                        }
+                    }
+                    None => {
+                        let db = state_an.db.lock();
+                        crate::engines::run_analyze(&db, None)
+                    }
+                };
                 *state_an.last_analyze_unix.lock() = Some(now);
             }
         }

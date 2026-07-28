@@ -133,6 +133,7 @@ impl Default for OrchestratorState {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum OrchEvent {
     DriftDetected { confidence: Confidence },
+    Aligned,
     EventAnchor { anchor: String },
     Tick,
     Wake,
@@ -290,6 +291,16 @@ pub fn reduce(state: &mut OrchestratorState, event: OrchEvent, now: i64) {
     match event {
         OrchEvent::SetGuards { guards } => {
             state.guards = guards;
+        }
+        OrchEvent::Aligned => {
+            if state.level != NudgeLevel::Idle {
+                return;
+            }
+            if state.pending_drift {
+                state.pending_drift = false;
+                state.pending_drift_since_unix = None;
+                state.pending_confidence = None;
+            }
         }
         OrchEvent::DriftDetected { confidence } => {
             if state.level != NudgeLevel::Idle {

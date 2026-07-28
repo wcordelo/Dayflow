@@ -110,14 +110,17 @@ pub fn run_monitor(
     let priorities = db.list_priorities(&day).map_err(|e| e.to_string())?;
     let result = evaluate_alignment(&ctx, &priorities);
 
-    if result.recommend_nudge {
+    let now = now_unix();
+    if result.verdict == "aligned" {
+        crate::orchestrator::reduce(state, OrchEvent::Aligned, now);
+    } else if result.recommend_nudge {
         let conf = result.confidence;
         crate::orchestrator::reduce(
             state,
             OrchEvent::DriftDetected {
                 confidence: conf,
             },
-            now_unix(),
+            now,
         );
         if let Some(trigger) = &ctx.capture_trigger {
             if matches!(
@@ -129,7 +132,7 @@ pub fn run_monitor(
                     OrchEvent::EventAnchor {
                         anchor: trigger.clone(),
                     },
-                    now_unix(),
+                    now,
                 );
             }
         }
@@ -183,15 +186,26 @@ pub fn run_brief(db: &Database, day: Option<&str>) -> Result<crate::db::BriefPay
     Ok(brief)
 }
 
-pub fn run_analyze_with_llm(
+pub struct AnalyzeLlmPending {
+    pub base: AnalyzeBatchResult,
+    pub day_key: String,
+    pub system: String,
+    pub user: String,
+}
+
+pub enum PrepareAnalyzeOutcome {
+    Complete(AnalyzeBatchResult),
+    Pending(AnalyzeLlmPending),
+}
+
+pub fn prepare_analyze_for_llm(
     db: &Database,
     day: Option<&str>,
-    llm: &dyn crate::gemini::LlmClient,
-) -> Result<AnalyzeBatchResult, String> {
+) -> Result<PrepareAnalyzeOutcome, String> {
     let prompt = load_prompt("analyze")?;
-    let mut base = run_analyze(db, day)?;
+    let base = run_analyze(db, day)?;
     if base.observations == 0 {
-        return Ok(base);
+        return Ok(PrepareAnalyzeOutcome::Complete(base));
     }
     let day_key = day
         .map(|s| s.to_string())
@@ -206,10 +220,22 @@ pub fn run_analyze_with_llm(
             .collect::<Vec<_>>()
             .join("\n")
     );
-    match llm.complete(
-        "You refine ADHD-companion timeline cards. Be concrete, shame-free, short.",
-        &user,
-    ) {
+    Ok(PrepareAnalyzeOutcome::Pending(AnalyzeLlmPending {
+        base,
+        day_key,
+        system: "You refine ADHD-companion timeline cards. Be concrete, shame-free, short."
+            .into(),
+        user,
+    }))
+}
+
+pub fn finish_analyze_for_llm(
+    db: &Database,
+    mut pending: AnalyzeLlmPending,
+    llm_out: Result<crate::gemini::LlmResponse, String>,
+) -> Result<AnalyzeBatchResult, String> {
+    let mut base = pending.base;
+    match llm_out {
         Ok(resp) => {
             crate::gemini::log_llm(db, "timeline", "analyze_batch", &resp, "ok");
             if resp.used_network {
@@ -223,9 +249,30 @@ pub fn run_analyze_with_llm(
             Ok(base)
         }
         Err(e) => {
-            db.log_llm_call(&day_key, "timeline", "analyze_batch", "error", None, &e)
-                .ok();
+            db.log_llm_call(
+                &pending.day_key,
+                "timeline",
+                "analyze_batch",
+                "error",
+                None,
+                &e,
+            )
+            .ok();
             Ok(base)
+        }
+    }
+}
+
+pub fn run_analyze_with_llm(
+    db: &Database,
+    day: Option<&str>,
+    llm: &dyn crate::gemini::LlmClient,
+) -> Result<AnalyzeBatchResult, String> {
+    match prepare_analyze_for_llm(db, day)? {
+        PrepareAnalyzeOutcome::Complete(r) => Ok(r),
+        PrepareAnalyzeOutcome::Pending(p) => {
+            let llm_out = llm.complete(&p.system, &p.user);
+            finish_analyze_for_llm(db, p, llm_out)
         }
     }
 }
