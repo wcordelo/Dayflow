@@ -105,15 +105,17 @@ fn e2e_capture_monitor_escalate_analyze_brief() {
         assert_eq!(pipe.tick().level_after, "L3");
     }
 
-    reduce(
-        pipe.orch,
-        OrchEvent::Acknowledge {
-            reason: "doing_it".into(),
-        },
-        now_unix(),
-    );
+    let before_ack = db.count_nudge_events().unwrap();
+    let ack = pipe.dispatch_event(OrchEvent::Acknowledge {
+        reason: "doing_it".into(),
+    });
+    assert_eq!(ack.level_after, "idle");
     assert_eq!(pipe.orch.level, NudgeLevel::Idle);
     assert!(pipe.orch.cooldown_until_unix.is_some());
+    assert!(
+        db.count_nudge_events().unwrap() > before_ack,
+        "acknowledge via dispatch_event must write nudge_events"
+    );
 
     pipe.sleep_lock();
     assert!(capture.pause_capture.load(std::sync::atomic::Ordering::SeqCst));
