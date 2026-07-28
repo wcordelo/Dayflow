@@ -1,5 +1,14 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import {
+  isPermissionGranted,
+  onAction,
+  registerActionTypes,
+  requestPermission,
+} from "@tauri-apps/plugin-notification";
+
+const L1_ACTION_TYPE_ID = "adhd-l1";
+const L1_NOTIFICATION_ID = 4101;
 
 type Tab = "timeline" | "checkin" | "brief" | "settings" | "nudge";
 
@@ -110,6 +119,61 @@ export default function App() {
       void refresh();
     }, 15_000);
     return () => window.clearInterval(id);
+  }, []);
+
+  // L1 OS notification tap → escalate to L2 and open the nudge surface.
+  useEffect(() => {
+    let cancelled = false;
+    let unlisten: (() => void) | undefined;
+
+    void (async () => {
+      try {
+        let granted = await isPermissionGranted();
+        if (!granted) {
+          granted = (await requestPermission()) === "granted";
+        }
+        if (!granted || cancelled) return;
+
+        await registerActionTypes([
+          {
+            id: L1_ACTION_TYPE_ID,
+            actions: [
+              { id: "open", title: "Check in", foreground: true },
+            ],
+          },
+        ]);
+
+        const listener = await onAction(async (notification) => {
+          const extra = notification.extra as Record<string, unknown> | undefined;
+          const kind = extra?.kind;
+          const isL1 =
+            kind === "l1" ||
+            notification.id === L1_NOTIFICATION_ID ||
+            notification.actionTypeId === L1_ACTION_TYPE_ID;
+          if (!isL1) return;
+          try {
+            await invoke("l1_notification_clicked");
+            await refresh();
+          } catch (e) {
+            setError(String(e));
+          }
+        });
+        if (cancelled) {
+          await listener.unregister();
+          return;
+        }
+        unlisten = () => {
+          void listener.unregister();
+        };
+      } catch {
+        // Non-Tauri / permission-denied environments: L1 click path unavailable.
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
   }, []);
 
   if (status && !status.onboarding_complete) {

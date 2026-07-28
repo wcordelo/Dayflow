@@ -111,6 +111,36 @@ fn orch_dispatch(
     Ok(next)
 }
 
+/// L1 notification tap / action → escalate to L2 and show the nudge surface.
+#[tauri::command]
+fn l1_notification_clicked(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<OrchestratorState, String> {
+    let before = state.orch.lock().level.as_str().to_string();
+    {
+        let mut orch = state.orch.lock();
+        orchestrator::reduce(&mut orch, OrchEvent::L1Clicked, now_unix());
+        let day = logical_day_key(now_unix());
+        if let Some(db) = state.db.try_lock() {
+            let _ = db.log_nudge_event(
+                &day,
+                orch.level.as_str(),
+                Some(&before),
+                "l1_clicked",
+                orch.last_transition.as_ref().map(|t| t.reason.as_str()),
+                None,
+                orch.escalate_after_unix,
+            );
+        }
+    }
+    let next = state.orch.lock().clone();
+    if next.level == orchestrator::NudgeLevel::L2 {
+        let _ = nudge_windows::present_nudge_level(&app, "L2");
+    }
+    Ok(next)
+}
+
 #[tauri::command]
 fn start_capture(state: tauri::State<'_, Arc<AppState>>) -> Result<(), String> {
     state.capture.start();
@@ -520,6 +550,7 @@ pub fn run() {
             get_status,
             get_orchestrator_state,
             orch_dispatch,
+            l1_notification_clicked,
             start_capture,
             stop_capture,
             inject_capture_event,

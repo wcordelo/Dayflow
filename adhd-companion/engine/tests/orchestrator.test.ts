@@ -33,6 +33,28 @@ describe("orchestrator state machine", () => {
     expect(state.pendingDrift).toBe(false);
   });
 
+  it("aligned clears pending drift while idle (mirrors Rust)", () => {
+    const clock = mutableClock(1_700_000_000);
+    let state = createInitialState();
+    state = reduce(state, { type: "drift_detected", confidence: "high" }, clock);
+    expect(state.pendingDrift).toBe(true);
+    state = reduce(state, { type: "aligned" }, clock);
+    expect(state.level).toBe("idle");
+    expect(state.pendingDrift).toBe(false);
+    expect(state.pendingDriftSinceUnix).toBeNull();
+    expect(state.pendingConfidence).toBeNull();
+  });
+
+  it("aligned is a no-op once already elevated", () => {
+    const clock = mutableClock(1_700_000_000);
+    let state = createInitialState();
+    state = reduce(state, { type: "drift_detected", confidence: "high" }, clock);
+    state = reduce(state, { type: "event_anchor", anchor: "app_switch" }, clock);
+    expect(state.level).toBe("L1");
+    state = reduce(state, { type: "aligned" }, clock);
+    expect(state.level).toBe("L1");
+  });
+
   it("L1 ignore ≥8m → L2; L2 ignore ≥10m → L3", () => {
     const clock = mutableClock(1_000);
     let state = createInitialState();

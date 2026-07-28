@@ -3,6 +3,9 @@
 use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_notification::NotificationExt;
 
+/// Stable id so action handlers can recognize L1 taps.
+pub const L1_NOTIFICATION_ID: i32 = 4101;
+
 pub fn present_nudge_level(app: &AppHandle, level: &str) -> Result<(), String> {
     match level {
         "L1" => show_l1_notification(app),
@@ -11,11 +14,17 @@ pub fn present_nudge_level(app: &AppHandle, level: &str) -> Result<(), String> {
     }
 }
 
+/// Action type registered in the UI so notification taps dispatch L1 → L2.
+pub const L1_ACTION_TYPE_ID: &str = "adhd-l1";
+
 pub fn show_l1_notification(app: &AppHandle) -> Result<(), String> {
     app.notification()
         .builder()
+        .id(L1_NOTIFICATION_ID)
         .title("Gentle nudge")
         .body("Still on your priorities? Tap to check in.")
+        .action_type_id(L1_ACTION_TYPE_ID)
+        .extra("kind", "l1")
         .show()
         .map_err(|e| e.to_string())?;
     Ok(())

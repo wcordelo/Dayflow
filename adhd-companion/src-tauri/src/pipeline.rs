@@ -180,6 +180,10 @@ impl<'a> Pipeline<'a> {
             self.focus.url.as_deref(),
             now_unix(),
         );
+        if let Some(last) = *self.last_nudge_present_unix {
+            self.orch.guards.minutes_since_last_nudge =
+                Some(((now_unix() - last) / 60).max(0));
+        }
         crate::orchestrator::reduce(self.orch, OrchEvent::Tick, now_unix());
         let rules = self.capture.rules.read().clone();
         let suppressed_l3_drm =
@@ -214,11 +218,10 @@ impl<'a> Pipeline<'a> {
         let level_after = self.orch.level.as_str().to_string();
         let (presented_l1, should_show_l2, should_show_l3) =
             presentation_flags(&level_before, &level_after, suppressed_l3_drm);
-        // After wake, re-present the *current* escalation surface even if level did not
-        // change during reduce — unlock should restore L2/L3 without waiting for the next tick.
+        // After wake, re-present L2/L3 panels (windows can be hidden across sleep).
+        // Do NOT re-fire L1 notifications unless wake actually transitioned into L1.
         let should_show_l2 = should_show_l2 || level_after == "L2";
         let should_show_l3 = should_show_l3 || (level_after == "L3" && !suppressed_l3_drm);
-        let presented_l1 = presented_l1 || level_after == "L1";
         PipelineStepResult {
             capture: None,
             monitor: None,

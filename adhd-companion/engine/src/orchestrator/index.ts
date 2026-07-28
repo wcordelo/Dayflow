@@ -19,6 +19,7 @@ export { TIMERS };
 export type OrchestratorEvent =
   | { type: "drift_detected"; confidence: Confidence }
   | { type: "event_anchor"; anchor: EventAnchor }
+  | { type: "aligned" } // clear pending drift when monitor says on-task
   | { type: "tick" } // re-check wall-clock deadlines / guards
   | { type: "wake" } // lid open / unlock — reload deadlines, re-run guards
   | { type: "l1_clicked" }
@@ -307,6 +308,18 @@ export function reduce(
   switch (event.type) {
     case "set_guards":
       return mergeGuards(state, event.guards);
+
+    case "aligned": {
+      // Mirror Rust OrchEvent::Aligned — only clears pending while idle.
+      if (state.level !== "idle") return state;
+      if (!state.pendingDrift) return state;
+      return {
+        ...state,
+        pendingDrift: false,
+        pendingDriftSinceUnix: null,
+        pendingConfidence: null,
+      };
+    }
 
     case "drift_detected": {
       if (state.level !== "idle") return state;
