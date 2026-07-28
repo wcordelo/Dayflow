@@ -242,7 +242,8 @@ impl Database {
     pub fn replace_analyze_timeline_cards(&self, day: &str) -> Result<(), DbError> {
         self.conn.execute(
             "UPDATE timeline_cards SET status = 'replaced', updated_at = ?2
-             WHERE day = ?1 AND status = 'active' AND (category IS NULL OR category = 'local')",
+             WHERE day = ?1 AND status = 'active'
+               AND (category IS NULL OR category IN ('local', 'gemini'))",
             params![day, now_unix()],
         )?;
         Ok(())

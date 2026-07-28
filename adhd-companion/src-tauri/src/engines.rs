@@ -242,26 +242,133 @@ pub fn prepare_analyze_for_llm(
         .unwrap_or_else(|| logical_day_key(now_unix()));
     let cards = db.list_timeline_cards(&day_key).map_err(|e| e.to_string())?;
     let user = format!(
-        "Prompt excerpt:\n{}\n\nCards:\n{}",
+        "Prompt excerpt:\n{}\n\nCards:\n{}\n\nReturn ONLY valid JSON with keys observations, timeline_cards, skipped_reason per the analyze schema.",
         prompt.chars().take(800).collect::<String>(),
         cards
             .iter()
-            .map(|c| format!("- {} ({})", c.title, c.summary.clone().unwrap_or_default()))
+            .map(|c| format!(
+                "- id={} start={} end={} title={} summary={}",
+                c.id,
+                c.start_time,
+                c.end_time,
+                c.title,
+                c.summary.clone().unwrap_or_default()
+            ))
             .collect::<Vec<_>>()
             .join("\n")
     );
     Ok(PrepareAnalyzeOutcome::Pending(AnalyzeLlmPending {
         base,
         day_key,
-        system: "You refine ADHD-companion timeline cards. Be concrete, shame-free, short."
+        system: "You refine ADHD-companion timeline cards. Be concrete, shame-free, short. Output only JSON matching the analyze schema (timeline_cards with start/end as unix seconds or ISO-8601, title, summary)."
             .into(),
         user,
     }))
 }
 
+#[derive(Debug, Deserialize)]
+struct AnalyzeLlmCard {
+    title: Option<String>,
+    summary: Option<String>,
+    start: Option<serde_json::Value>,
+    end: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Deserialize)]
+struct AnalyzeLlmPayload {
+    #[serde(default)]
+    timeline_cards: Vec<AnalyzeLlmCard>,
+    #[serde(default)]
+    observations: Vec<serde_json::Value>,
+    #[serde(default)]
+    skipped_reason: Option<String>,
+}
+
+fn extract_json_object(text: &str) -> Option<&str> {
+    let t = text.trim();
+    let start = t.find('{')?;
+    let end = t.rfind('}')?;
+    if end < start {
+        return None;
+    }
+    Some(&t[start..=end])
+}
+
+fn parse_time_value(v: &Option<serde_json::Value>, fallback: i64) -> i64 {
+    let Some(v) = v else {
+        return fallback;
+    };
+    if let Some(n) = v.as_i64() {
+        return n;
+    }
+    if let Some(n) = v.as_f64() {
+        return n as i64;
+    }
+    if let Some(s) = v.as_str() {
+        if let Ok(n) = s.parse::<i64>() {
+            return n;
+        }
+        if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(s) {
+            return dt.timestamp();
+        }
+        if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%dT%H:%M:%S") {
+            return dt.and_utc().timestamp();
+        }
+    }
+    fallback
+}
+
+/// Apply Gemini/network analyze JSON onto SQLite timeline_cards (sliding-window replace).
+fn apply_analyze_llm_cards(
+    db: &Database,
+    day_key: &str,
+    text: &str,
+    fallback_start: i64,
+    fallback_end: i64,
+) -> Result<Option<(usize, usize)>, String> {
+    let Some(json) = extract_json_object(text) else {
+        return Ok(None);
+    };
+    let parsed: AnalyzeLlmPayload = match serde_json::from_str(json) {
+        Ok(p) => p,
+        Err(_) => return Ok(None),
+    };
+    if parsed
+        .skipped_reason
+        .as_deref()
+        .filter(|s| !s.is_empty() && *s != "null")
+        .is_some()
+        && parsed.timeline_cards.is_empty()
+    {
+        return Ok(None);
+    }
+    if parsed.timeline_cards.is_empty() {
+        return Ok(None);
+    }
+
+    db.replace_analyze_timeline_cards(day_key)
+        .map_err(|e| e.to_string())?;
+    let mut cards = 0usize;
+    for c in parsed.timeline_cards {
+        let title = c
+            .title
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .unwrap_or("Activity");
+        let summary = c.summary.clone().unwrap_or_default();
+        let start = parse_time_value(&c.start, fallback_start);
+        let end = parse_time_value(&c.end, fallback_end).max(start);
+        db.insert_timeline_card(day_key, start, end, title, &summary, Some("gemini"))
+            .map_err(|e| e.to_string())?;
+        cards += 1;
+    }
+    Ok(Some((cards, parsed.observations.len())))
+}
+
 pub fn finish_analyze_for_llm(
     db: &Database,
-    mut pending: AnalyzeLlmPending,
+    pending: AnalyzeLlmPending,
     llm_out: Result<crate::gemini::LlmResponse, String>,
 ) -> Result<AnalyzeBatchResult, String> {
     let mut base = pending.base;
@@ -270,11 +377,32 @@ pub fn finish_analyze_for_llm(
             crate::gemini::log_llm(db, "timeline", "analyze_batch", &resp, "ok");
             if resp.used_network {
                 base.used_llm = true;
-                base.summary = format!(
-                    "{} | llm: {}",
-                    base.summary,
-                    resp.text.chars().take(180).collect::<String>()
-                );
+                let now = now_unix();
+                match apply_analyze_llm_cards(
+                    db,
+                    &pending.day_key,
+                    &resp.text,
+                    now - 15 * 60,
+                    now,
+                )? {
+                    Some((cards, obs)) => {
+                        base.cards_created = cards;
+                        if obs > 0 {
+                            base.observations = obs;
+                        }
+                        base.summary = format!(
+                            "Created {cards} timeline card(s) from Gemini analyze."
+                        );
+                    }
+                    None => {
+                        // Keep heuristic cards in SQLite; surface a truncated note only.
+                        base.summary = format!(
+                            "{} | llm(unparsed): {}",
+                            base.summary,
+                            resp.text.chars().take(120).collect::<String>()
+                        );
+                    }
+                }
             }
             Ok(base)
         }
@@ -427,5 +555,63 @@ mod tests {
         assert_eq!(result.verdict, "drift");
         assert!(!result.recommend_nudge);
         assert!(!orch.pending_drift);
+    }
+
+    #[test]
+    fn finish_analyze_writes_gemini_cards_to_db() {
+        let dir = tempdir().unwrap();
+        let db = Database::open(dir.path()).unwrap();
+        let day = logical_day_key(now_unix());
+        let now = now_unix();
+        db.insert_screenshot(
+            now - 60,
+            "app_switch",
+            Some("com.apple.Safari"),
+            Some("Docs"),
+            None,
+            false,
+            None,
+            None,
+            Some("h1"),
+            Some(1.0),
+            None,
+        )
+        .unwrap();
+        let base = run_analyze(&db, Some(&day)).unwrap();
+        assert!(base.cards_created >= 1);
+        let local = db.list_timeline_cards(&day).unwrap();
+        assert!(!local.is_empty());
+        assert_eq!(local[0].category.as_deref(), Some("local"));
+
+        let pending = AnalyzeLlmPending {
+            base,
+            day_key: day.clone(),
+            system: "sys".into(),
+            user: "user".into(),
+        };
+        let llm = crate::gemini::LlmResponse {
+            text: format!(
+                "```json\n{{\n  \"observations\": [{{\"note\":\"reading\"}}],\n  \"timeline_cards\": [{{\n    \"start\": {},\n    \"end\": {},\n    \"title\": \"Refined docs\",\n    \"summary\": \"Worked on proposal docs\"\n  }}],\n  \"skipped_reason\": null\n}}\n```",
+                now - 120,
+                now
+            ),
+            model: "test".into(),
+            prompt_tokens: Some(1),
+            completion_tokens: Some(1),
+            cost_usd: Some(0.0),
+            used_network: true,
+        };
+        let out = finish_analyze_for_llm(&db, pending, Ok(llm)).unwrap();
+        assert!(out.used_llm);
+        assert_eq!(out.cards_created, 1);
+        let cards = db.list_timeline_cards(&day).unwrap();
+        assert_eq!(cards.len(), 1);
+        assert_eq!(cards[0].title, "Refined docs");
+        assert_eq!(cards[0].category.as_deref(), Some("gemini"));
+        assert!(cards[0]
+            .summary
+            .as_deref()
+            .unwrap_or("")
+            .contains("proposal"));
     }
 }
