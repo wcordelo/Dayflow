@@ -20,6 +20,18 @@ describe("orchestrator state machine", () => {
     );
   });
 
+  it("repeated drift_detected preserves pendingDriftSinceUnix", () => {
+    const clock = mutableClock(1_700_000_000);
+    let state = createInitialState();
+    state = reduce(state, { type: "drift_detected", confidence: "medium" }, clock);
+    expect(state.pendingDriftSinceUnix).toBe(1_700_000_000);
+    clock.advance(30);
+    state = reduce(state, { type: "drift_detected", confidence: "high" }, clock);
+    expect(state.pendingDrift).toBe(true);
+    expect(state.pendingDriftSinceUnix).toBe(1_700_000_000);
+    expect(state.pendingConfidence).toBe("high");
+  });
+
   it("never fires from low-confidence drift", () => {
     const clock = mutableClock(1_700_000_000);
     let state = createInitialState();

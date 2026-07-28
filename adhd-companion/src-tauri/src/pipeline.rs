@@ -377,6 +377,53 @@ impl<'a> Pipeline<'a> {
         self.capture.pause_capture.store(true, Ordering::SeqCst);
     }
 
+    /// Apply a raw orchestrator event (Tauri `orch_dispatch`) with the same
+    /// idle→elevated budget / spacing bookkeeping as tick / wake / ingest.
+    pub fn dispatch_event(&mut self, event: OrchEvent) -> PipelineStepResult {
+        let level_before = self.orch.level.as_str().to_string();
+        let day = logical_day_key(now_unix());
+        self.sync_runtime_guards(&day);
+        crate::orchestrator::reduce(self.orch, event, now_unix());
+        let level_after = self.orch.level.as_str().to_string();
+        let rules = self.capture.rules.read().clone();
+        let suppressed_l3_drm =
+            should_suppress_l3_for_focus(self.focus.bundle_id.as_deref(), &rules);
+        let (presented_l1, should_show_l2, should_show_l3) =
+            presentation_flags(&level_before, &level_after, suppressed_l3_drm);
+        if level_before == "idle" && level_after != "idle" {
+            let reason = self
+                .orch
+                .last_transition
+                .as_ref()
+                .map(|t| t.reason.clone())
+                .unwrap_or_else(|| "dispatch".into());
+            self.record_new_nudge_session(&day, "idle", &reason, None);
+        } else {
+            let _ = self.db.log_nudge_event(
+                &day,
+                self.orch.level.as_str(),
+                Some(&level_before),
+                "dispatch",
+                self.orch
+                    .last_transition
+                    .as_ref()
+                    .map(|t| t.reason.as_str()),
+                None,
+                self.orch.escalate_after_unix,
+            );
+        }
+        PipelineStepResult {
+            capture: None,
+            monitor: None,
+            level_before,
+            level_after,
+            presented_l1,
+            should_show_l2,
+            should_show_l3,
+            suppressed_l3_drm,
+        }
+    }
+
     pub fn run_analyze(&self) -> Result<crate::engines::AnalyzeBatchResult, String> {
         let client = select_client(self.data_dir, self.settings.gemini_analysis_opt_in);
         run_analyze_with_llm(self.db, None, client.as_ref())

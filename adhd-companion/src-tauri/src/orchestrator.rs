@@ -324,7 +324,11 @@ pub fn reduce(state: &mut OrchestratorState, event: OrchEvent, now: i64) {
                 return;
             }
             state.pending_drift = true;
-            state.pending_drift_since_unix = Some(now);
+            // Keep the original wait start so idle_fallback drift refreshes cannot
+            // restart the ~10m pending-anchor cap indefinitely.
+            if state.pending_drift_since_unix.is_none() {
+                state.pending_drift_since_unix = Some(now);
+            }
             state.pending_confidence = Some(confidence);
         }
         OrchEvent::EventAnchor { anchor } => {
@@ -408,6 +412,31 @@ mod tests {
         );
         assert_eq!(s.level, NudgeLevel::L1);
         assert_eq!(s.escalate_after_unix, Some(1000 + L1_IGNORE_SECS));
+    }
+
+    #[test]
+    fn drift_refresh_preserves_pending_since() {
+        let mut s = OrchestratorState::default();
+        reduce(
+            &mut s,
+            OrchEvent::DriftDetected {
+                confidence: Confidence::Medium,
+            },
+            1000,
+        );
+        assert_eq!(s.pending_drift_since_unix, Some(1000));
+        reduce(
+            &mut s,
+            OrchEvent::DriftDetected {
+                confidence: Confidence::High,
+            },
+            1000 + 30,
+        );
+        assert!(s.pending_drift);
+        assert_eq!(s.pending_drift_since_unix, Some(1000));
+        assert_eq!(s.pending_confidence, Some(Confidence::High));
+        reduce(&mut s, OrchEvent::Tick, 1000 + PENDING_ANCHOR_CAP_SECS);
+        assert_eq!(s.level, NudgeLevel::L1);
     }
 
     #[test]

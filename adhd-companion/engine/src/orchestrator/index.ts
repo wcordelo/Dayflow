@@ -338,11 +338,13 @@ export function reduce(
           },
         };
       }
-      // Wait for event anchor (caller may immediately send one)
+      // Wait for event anchor (caller may immediately send one).
+      // Preserve pendingDriftSinceUnix so repeated drift signals (e.g. idle_fallback)
+      // cannot restart the ~10m pending-anchor cap.
       return {
         ...withConf,
         pendingDrift: true,
-        pendingDriftSinceUnix: now,
+        pendingDriftSinceUnix: state.pendingDriftSinceUnix ?? now,
         pendingConfidence: event.confidence,
       };
     }

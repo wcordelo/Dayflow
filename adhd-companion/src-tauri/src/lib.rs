@@ -95,30 +95,12 @@ fn orch_dispatch(
     state: tauri::State<'_, Arc<AppState>>,
     event: OrchEvent,
 ) -> Result<OrchestratorState, String> {
-    let before = state.orch.lock().level.as_str().to_string();
-    {
-        let mut orch = state.orch.lock();
-        orchestrator::reduce(&mut orch, event, now_unix());
-        let day = logical_day_key(now_unix());
-        if let Some(db) = state.db.try_lock() {
-            let _ = db.log_nudge_event(
-                &day,
-                orch.level.as_str(),
-                Some(&before),
-                "dispatch",
-                orch.last_transition.as_ref().map(|t| t.reason.as_str()),
-                None,
-                orch.escalate_after_unix,
-            );
-        }
-    }
-    let next = state.orch.lock().clone();
-    let _ = nudge_windows::present_nudge_level(&app, next.level.as_str());
-    if next.level.as_str() == "idle" {
+    let step = with_pipeline(&state, |p| p.dispatch_event(event));
+    runtime::present_from_step(&app, &step);
+    if step.level_after == "idle" {
         let _ = nudge_windows::hide_nudge_windows(&app);
     }
-    persist_orch(&state);
-    Ok(next)
+    Ok(state.orch.lock().clone())
 }
 
 /// L1 notification tap / action → escalate to L2 and show the nudge surface.
