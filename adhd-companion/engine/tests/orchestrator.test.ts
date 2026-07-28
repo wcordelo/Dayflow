@@ -84,6 +84,25 @@ describe("orchestrator state machine", () => {
     expect(state.level).toBe("L3");
   });
 
+  it("ignore escalation is not cancelled by spacing", () => {
+    const clock = mutableClock(1_000);
+    let state = createInitialState();
+    state = reduce(state, { type: "drift_detected", confidence: "high" }, clock);
+    state = reduce(state, { type: "event_anchor", anchor: "app_switch" }, clock);
+    expect(state.level).toBe("L1");
+    state = {
+      ...state,
+      guards: {
+        ...state.guards,
+        minutesSinceLastNudge: 8,
+        minMinutesBetweenNudges: 15,
+      },
+    };
+    clock.advance(TIMERS.L1_IGNORE_SECONDS);
+    state = reduce(state, { type: "tick" }, clock);
+    expect(state.level).toBe("L2");
+  });
+
   it("doing_it applies 45m cooldown; snooze applies 20m", () => {
     const clock = mutableClock(5_000);
     let state = createInitialState();

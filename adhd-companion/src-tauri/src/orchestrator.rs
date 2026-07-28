@@ -143,6 +143,21 @@ pub enum OrchEvent {
 }
 
 pub fn guards_block(state: &OrchestratorState, now: i64) -> Option<&'static str> {
+    guards_block_inner(state, now, true)
+}
+
+/// Guards for L1→L2 / L2→L3 ignore escalation. Spacing must not apply: the
+/// session already counted against the daily budget / last-present clock, and
+/// L1's ~8m deadline is shorter than the default 15m spacing window.
+fn guards_block_escalation(state: &OrchestratorState, now: i64) -> Option<&'static str> {
+    guards_block_inner(state, now, false)
+}
+
+fn guards_block_inner(
+    state: &OrchestratorState,
+    now: i64,
+    enforce_spacing: bool,
+) -> Option<&'static str> {
     let g = &state.guards;
     if !g.companion_enabled {
         return Some("companion_disabled");
@@ -171,9 +186,11 @@ pub fn guards_block(state: &OrchestratorState, now: i64) -> Option<&'static str>
             return Some("cooldown");
         }
     }
-    if let Some(mins) = g.minutes_since_last_nudge {
-        if mins < g.min_minutes_between_nudges {
-            return Some("spacing");
+    if enforce_spacing {
+        if let Some(mins) = g.minutes_since_last_nudge {
+            if mins < g.min_minutes_between_nudges {
+                return Some("spacing");
+            }
         }
     }
     if !g.confidence.at_least(g.confidence_threshold) {
@@ -266,7 +283,7 @@ fn maybe_escalate(state: &mut OrchestratorState, now: i64) {
     if now < deadline {
         return;
     }
-    if let Some(block) = guards_block(state, now) {
+    if let Some(block) = guards_block_escalation(state, now) {
         enter_cooldown(state, now, "guards_failed");
         if let Some(t) = state.last_transition.as_mut() {
             t.reason = format!("escalate_cancelled:{block}");
@@ -508,6 +525,38 @@ mod tests {
         );
         reduce(&mut s, OrchEvent::Tick, L1_IGNORE_SECS);
         assert_eq!(s.level, NudgeLevel::L2);
+        reduce(&mut s, OrchEvent::Tick, L1_IGNORE_SECS + L2_IGNORE_SECS);
+        assert_eq!(s.level, NudgeLevel::L3);
+    }
+
+    #[test]
+    fn escalate_ignores_spacing_within_active_session() {
+        let mut s = OrchestratorState::default();
+        reduce(
+            &mut s,
+            OrchEvent::DriftDetected {
+                confidence: Confidence::High,
+            },
+            0,
+        );
+        reduce(
+            &mut s,
+            OrchEvent::EventAnchor {
+                anchor: "app_switch".into(),
+            },
+            0,
+        );
+        assert_eq!(s.level, NudgeLevel::L1);
+        // Pipeline would report ~8m since present; default min spacing is 15m.
+        s.guards.minutes_since_last_nudge = Some(8);
+        s.guards.min_minutes_between_nudges = 15;
+        reduce(&mut s, OrchEvent::Tick, L1_IGNORE_SECS);
+        assert_eq!(
+            s.level,
+            NudgeLevel::L2,
+            "spacing must not cancel L1→L2 ignore escalation"
+        );
+        s.guards.minutes_since_last_nudge = Some(8 + 10);
         reduce(&mut s, OrchEvent::Tick, L1_IGNORE_SECS + L2_IGNORE_SECS);
         assert_eq!(s.level, NudgeLevel::L3);
     }

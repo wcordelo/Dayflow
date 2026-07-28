@@ -105,7 +105,9 @@ function mergeGuards(
 export function guardsBlockNudge(
   state: OrchestratorState,
   nowUnix: number,
+  opts?: { enforceSpacing?: boolean },
 ): string | null {
+  const enforceSpacing = opts?.enforceSpacing ?? true;
   const g = state.guards;
   if (!g.companionEnabled) return "companion_disabled";
   if (g.overwhelm) return "overwhelm";
@@ -117,6 +119,7 @@ export function guardsBlockNudge(
   const cd = g.cooldownUntilUnix ?? state.cooldownUntilUnix;
   if (cd !== null && nowUnix < cd) return "cooldown";
   if (
+    enforceSpacing &&
     g.minutesSinceLastNudge !== null &&
     g.minutesSinceLastNudge < g.minMinutesBetweenNudges
   ) {
@@ -245,7 +248,7 @@ function maybeEscalate(
   if (state.escalateAfterUnix === null) return state;
   if (nowUnix < state.escalateAfterUnix) return state;
 
-  const block = guardsBlockNudge(state, nowUnix);
+  const block = guardsBlockNudge(state, nowUnix, { enforceSpacing: false });
   if (block) {
     // Do not leap levels after sleep — cancel escalation path back toward idle
     return {
