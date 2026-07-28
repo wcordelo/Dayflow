@@ -1,5 +1,5 @@
 # Every 10 minutes: launch a Cursor Cloud Agent to address unresolved Bugbot
-# comments on PR #2 (branch cursor/adhd-companion-plan-0f84).
+# comments on PR #3 (branch cursor/adhd-bugbot-ack-debounce-0f84).
 #
 # Setup (once):
 #   gh secret set CURSOR_API_KEY --repo wcordelo/Dayflow
@@ -39,8 +39,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          state=$(gh api repos/wcordelo/Dayflow/pulls/2 --jq .state)
-          echo "PR #2 state=$state"
+          state=$(gh api repos/wcordelo/Dayflow/pulls/3 --jq .state)
+          echo "PR #3 state=$state"
           if [ "$state" != "open" ]; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
           else
@@ -55,7 +55,7 @@ jobs:
         run: |
           set -euo pipefail
           echo "skip_agent=false" >> "$GITHUB_OUTPUT"
-          PR_URL='https://github.com/wcordelo/Dayflow/pull/2'
+          PR_URL='https://github.com/wcordelo/Dayflow/pull/3'
           items=$(curl -sS -u "${CURSOR_API_KEY}:" \
             -G 'https://api.cursor.com/v1/agents' \
             --data-urlencode "prUrl=${PR_URL}" \
@@ -104,8 +104,8 @@ jobs:
           export PROMPT_TEXT=$(cat <<'EOF'
           You run on a schedule against this repository and branch.
 
-          Target PR: https://github.com/wcordelo/Dayflow/pull/2
-          Work only on that PR's head branch: cursor/adhd-companion-plan-0f84
+          Target PR: https://github.com/wcordelo/Dayflow/pull/3
+          Work only on that PR's head branch: cursor/adhd-bugbot-ack-debounce-0f84
           Push commits to the existing branch.
           Do not open a new PR. Do not approve the PR.
           Do not mention end-user personal names in commits, comments, or docs.
@@ -114,7 +114,7 @@ jobs:
           Find unresolved Bugbot (cursor[bot] / Cursor Bugbot) review comments on the target PR, assess each one, and address actionable findings.
 
           ## Process
-          1. Use `gh` and/or PR comment tools to list open (unresolved) review threads on PR #2.
+          1. Use `gh` and/or PR comment tools to list open (unresolved) review threads on PR #3.
           2. Filter to comments from Bugbot / cursor[bot].
           3. Skip threads already fixed, outdated, or already handled.
           4. For each actionable finding (prefer High severity; max 3 per run): assess, minimal fix, test if feasible, commit, push, reply on the thread, resolve if done.
@@ -133,7 +133,7 @@ jobs:
             "name": "Bugbot autofix — ADHD companion PR",
             "repos": [{
               "url": "https://github.com/wcordelo/Dayflow",
-              "prUrl": "https://github.com/wcordelo/Dayflow/pull/2"
+              "prUrl": "https://github.com/wcordelo/Dayflow/pull/3"
             }],
             "workOnCurrentBranch": True,
             "autoCreatePR": False
