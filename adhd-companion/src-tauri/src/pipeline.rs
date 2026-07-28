@@ -89,9 +89,22 @@ impl<'a> Pipeline<'a> {
         }
     }
 
-    /// DRM / pause-watching: do not fire pending caps or escalate surfaces.
-    fn should_quiet_nudge_progression(&self, drm_focus: bool) -> bool {
+    /// DRM / pause-watching / private browsing: do not fire pending caps or escalate.
+    fn should_quiet_nudge_progression(
+        &self,
+        drm_focus: bool,
+        rules: &crate::privacy::PrivacyRules,
+    ) -> bool {
         if drm_focus {
+            return true;
+        }
+        // Match ingest: while focus is an incognito/private window, hold pending
+        // caps and L1–L3 escalation even though no capture event is in flight.
+        if crate::privacy::is_incognito_window(
+            self.focus.bundle_id.as_deref(),
+            self.focus.title.as_deref(),
+            rules,
+        ) {
             return true;
         }
         let now = now_unix();
@@ -239,8 +252,9 @@ impl<'a> Pipeline<'a> {
         let rules = self.capture.rules.read().clone();
         let suppressed_l3_drm =
             should_suppress_l3_for_focus(self.focus.bundle_id.as_deref(), &rules);
-        if self.should_quiet_nudge_progression(suppressed_l3_drm) {
-            // Hold pending/escalation while DRM or pause-watching; still expire cooldowns.
+        if self.should_quiet_nudge_progression(suppressed_l3_drm, &rules) {
+            // Hold pending/escalation while DRM, pause-watching, or incognito;
+            // still expire cooldowns.
             self.clear_expired_cooldown();
             return PipelineStepResult {
                 capture: None,
@@ -297,11 +311,11 @@ impl<'a> Pipeline<'a> {
         let rules = self.capture.rules.read().clone();
         let suppressed_l3_drm =
             should_suppress_l3_for_focus(self.focus.bundle_id.as_deref(), &rules);
-        let quiet = self.should_quiet_nudge_progression(suppressed_l3_drm);
+        let quiet = self.should_quiet_nudge_progression(suppressed_l3_drm, &rules);
 
         // Always dispatch Wake so wall-clock deadlines reload and wake_cancel runs.
-        // Under DRM / pause-watching, suppress UI and roll back pending/escalate
-        // progression (keep wake_cancel + cooldown expiry).
+        // Under DRM / pause-watching / incognito, suppress UI and roll back pending/
+        // escalate progression (keep wake_cancel + cooldown expiry).
         let snap = quiet.then(|| self.orch.clone());
         crate::orchestrator::reduce(self.orch, OrchEvent::Wake, now_unix());
         if let Some(prev) = snap {

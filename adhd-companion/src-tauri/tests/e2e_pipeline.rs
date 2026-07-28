@@ -325,6 +325,25 @@ fn e2e_incognito_skip_does_not_run_monitor() {
     assert!(step.monitor.is_none());
     assert_eq!(step.level_after, "idle");
     assert!(!pipe.orch.pending_drift);
+
+    // Pending past the wall-clock cap while still on an incognito window must
+    // not fire L1 via tick (ingest already skips the monitor).
+    pipe.orch.pending_drift = true;
+    pipe.orch.pending_drift_since_unix = Some(now_unix() - PENDING_ANCHOR_CAP_SECS - 1);
+    pipe.orch.pending_confidence = Some(Confidence::High);
+    let held = pipe.tick();
+    assert_eq!(held.level_after, "idle");
+    assert!(!held.presented_l1);
+    assert!(pipe.orch.pending_drift);
+    assert_eq!(pipe.settings.nudges_fired_today, 0);
+
+    pipe.orch.escalate_after_unix = Some(now_unix() - 1);
+    pipe.orch.level = NudgeLevel::L1;
+    let woke = pipe.wake();
+    assert_eq!(woke.level_after, "L1");
+    assert!(!woke.presented_l1);
+    assert!(!woke.should_show_l2);
+    assert!(!woke.should_show_l3);
 }
 
 #[test]
