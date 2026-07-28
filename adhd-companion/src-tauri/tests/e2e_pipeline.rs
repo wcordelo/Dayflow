@@ -326,3 +326,64 @@ fn e2e_incognito_skip_does_not_run_monitor() {
     assert_eq!(step.level_after, "idle");
     assert!(!pipe.orch.pending_drift);
 }
+
+#[test]
+fn e2e_pending_anchor_on_unknown_budgets() {
+    let dir = tempdir().unwrap();
+    let db = Database::open(dir.path()).unwrap();
+    let mut settings = AppSettings {
+        onboarding_complete: true,
+        gemini_analysis_opt_in: false,
+        daily_nudge_budget: 20,
+        nudges_fired_today: 0,
+        quiet_hours_start: None,
+        quiet_hours_end: None,
+        ..AppSettings::default()
+    };
+    let capture = CaptureService::new();
+    capture.set_rules(default_rules_from_settings(&settings));
+    capture.start();
+    db.replace_priorities(
+        &logical_day_key(now_unix()),
+        &["Write grant proposal".into()],
+        "checkin",
+    )
+    .unwrap();
+
+    let mut orch = OrchestratorState::default();
+    orch.guards.minutes_since_last_nudge = Some(60);
+    orch.guards.min_minutes_between_nudges = 0;
+    orch.pending_drift = true;
+    orch.pending_drift_since_unix = Some(now_unix() - 30);
+    orch.pending_confidence = Some(Confidence::High);
+
+    let mut focus = FocusContext::default();
+    let mut last_nudge = None;
+    let mut pipe = Pipeline {
+        db: &db,
+        capture: &capture,
+        orch: &mut orch,
+        settings: &mut settings,
+        focus: &mut focus,
+        data_dir: dir.path(),
+        last_nudge_present_unix: &mut last_nudge,
+    };
+
+    // Unknown Safari title + app_switch should fire pending → L1 and count budget.
+    let step = pipe
+        .ingest_capture(CaptureEvent {
+            trigger: "app_switch".into(),
+            bundle_id: Some("com.apple.Safari".into()),
+            window_title: Some("Random tab".into()),
+            browser_url: None,
+            idle_seconds: Some(1.0),
+            jpeg_base64: None,
+            accessibility_text: None,
+            frame_hash: Some("u1".into()),
+        })
+        .unwrap();
+    assert_eq!(step.level_after, "L1");
+    assert!(step.presented_l1);
+    assert_eq!(pipe.settings.nudges_fired_today, 1);
+    assert!(pipe.last_nudge_present_unix.is_some());
+}

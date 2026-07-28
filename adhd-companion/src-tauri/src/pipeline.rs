@@ -193,18 +193,22 @@ impl<'a> Pipeline<'a> {
                 idle_seconds: event.idle_seconds,
             };
             let m = run_monitor(self.db, self.orch, ctx)?;
-            if m.recommend_nudge
-                && self.orch.level != NudgeLevel::Idle
-                && level_before == "idle"
-            {
-                // Budget once per new nudge session; L1 UI only when actually entering L1.
+            // Budget once per idle→elevated transition (anchor-on-pending, direct
+            // drift+anchor, etc.) — match tick/wake bookkeeping.
+            if level_before == "idle" && self.orch.level != NudgeLevel::Idle {
                 presented_l1 = self.orch.level == NudgeLevel::L1;
                 let conf = match m.confidence {
                     crate::orchestrator::Confidence::Low => "low",
                     crate::orchestrator::Confidence::Medium => "medium",
                     crate::orchestrator::Confidence::High => "high",
                 };
-                self.record_new_nudge_session(&day, "idle", "monitor_drift", Some(conf));
+                let reason = self
+                    .orch
+                    .last_transition
+                    .as_ref()
+                    .map(|t| t.reason.clone())
+                    .unwrap_or_else(|| "monitor".into());
+                self.record_new_nudge_session(&day, "idle", &reason, Some(conf));
             }
             Some(m)
         };

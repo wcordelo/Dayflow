@@ -148,8 +148,24 @@ pub fn run_monitor(
             now,
         );
     }
-    // verdict == "unknown": leave pending alone so anchor-cap / later anchors
-    // can still fire from an earlier actionable drift.
+    // unknown leaves pending alone. If pending is still waiting and this capture
+    // carries an event anchor, fire it (do not wait solely for the 10m cap).
+    if state.pending_drift {
+        if let Some(trigger) = &ctx.capture_trigger {
+            if matches!(
+                trigger.as_str(),
+                "app_switch" | "window_focus" | "idle_return"
+            ) {
+                crate::orchestrator::reduce(
+                    state,
+                    OrchEvent::EventAnchor {
+                        anchor: trigger.clone(),
+                    },
+                    now,
+                );
+            }
+        }
+    }
     Ok(result)
 }
 
@@ -349,6 +365,38 @@ mod tests {
         assert_eq!(result.verdict, "unknown");
         assert!(orch.pending_drift);
         assert_eq!(orch.pending_confidence, Some(Confidence::High));
+    }
+
+    #[test]
+    fn pending_unknown_with_anchor_fires_l1() {
+        let dir = tempdir().unwrap();
+        let db = Database::open(dir.path()).unwrap();
+        let day = logical_day_key(now_unix());
+        db.replace_priorities(&day, &["Write grant proposal".into()], "checkin")
+            .unwrap();
+
+        let mut orch = OrchestratorState::default();
+        orch.guards.minutes_since_last_nudge = Some(60);
+        orch.guards.min_minutes_between_nudges = 0;
+        orch.pending_drift = true;
+        orch.pending_drift_since_unix = Some(now_unix() - 30);
+        orch.pending_confidence = Some(Confidence::High);
+
+        let result = run_monitor(
+            &db,
+            &mut orch,
+            CaptureContext {
+                frontmost_bundle_id: Some("com.apple.Safari".into()),
+                window_title: Some("Random tab".into()),
+                browser_url: None,
+                capture_trigger: Some("app_switch".into()),
+                idle_seconds: Some(1.0),
+            },
+        )
+        .unwrap();
+        assert_eq!(result.verdict, "unknown");
+        assert_eq!(orch.level, crate::orchestrator::NudgeLevel::L1);
+        assert!(!orch.pending_drift);
     }
 
     #[test]
