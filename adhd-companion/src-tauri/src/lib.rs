@@ -109,29 +109,9 @@ fn l1_notification_clicked(
     app: tauri::AppHandle,
     state: tauri::State<'_, Arc<AppState>>,
 ) -> Result<OrchestratorState, String> {
-    let before = state.orch.lock().level.as_str().to_string();
-    {
-        let mut orch = state.orch.lock();
-        orchestrator::reduce(&mut orch, OrchEvent::L1Clicked, now_unix());
-        let day = logical_day_key(now_unix());
-        if let Some(db) = state.db.try_lock() {
-            let _ = db.log_nudge_event(
-                &day,
-                orch.level.as_str(),
-                Some(&before),
-                "l1_clicked",
-                orch.last_transition.as_ref().map(|t| t.reason.as_str()),
-                None,
-                orch.escalate_after_unix,
-            );
-        }
-    }
-    let next = state.orch.lock().clone();
-    if next.level == orchestrator::NudgeLevel::L2 {
-        let _ = nudge_windows::present_nudge_level(&app, "L2");
-    }
-    persist_orch(&state);
-    Ok(next)
+    let step = with_pipeline(&state, |p| p.dispatch_event(OrchEvent::L1Clicked));
+    runtime::present_from_step(&app, &step);
+    Ok(state.orch.lock().clone())
 }
 
 #[tauri::command]

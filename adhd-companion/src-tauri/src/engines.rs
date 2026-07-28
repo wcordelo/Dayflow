@@ -22,13 +22,28 @@ pub struct AnalyzeBatchResult {
 }
 
 pub fn prompts_dir() -> PathBuf {
-    // Dev: repo prompts/; bundled: resource dir — resolve relative to CARGO_MANIFEST_DIR
+    // Dev checkout: adhd-companion/prompts next to src-tauri.
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../prompts")
 }
 
+/// Load an engine prompt. Prefer on-disk files in development; always fall back
+/// to prompts embedded at compile time so packaged builds never fail when the
+/// repo `prompts/` tree is absent beside the binary.
 pub fn load_prompt(name: &str) -> Result<String, String> {
     let path = prompts_dir().join(format!("{name}.md"));
-    fs::read_to_string(&path).map_err(|e| format!("prompt {name}: {e}"))
+    if let Ok(s) = fs::read_to_string(&path) {
+        return Ok(s);
+    }
+    let embedded = match name {
+        "analyze" => Some(include_str!("../../prompts/analyze.md")),
+        "monitor" => Some(include_str!("../../prompts/monitor.md")),
+        "checkin" => Some(include_str!("../../prompts/checkin.md")),
+        "brief" => Some(include_str!("../../prompts/brief.md")),
+        _ => None,
+    };
+    embedded
+        .map(|s| s.to_string())
+        .ok_or_else(|| format!("unknown prompt {name}"))
 }
 
 /// Slow path — heuristic batch without Gemini when no key; still writes timeline cards.
@@ -613,5 +628,14 @@ mod tests {
             .as_deref()
             .unwrap_or("")
             .contains("proposal"));
+    }
+
+    #[test]
+    fn load_prompt_embeds_core_engines() {
+        for name in ["analyze", "monitor", "checkin", "brief"] {
+            let body = load_prompt(name).expect(name);
+            assert!(body.len() > 80, "{name} too short");
+        }
+        assert!(load_prompt("does-not-exist").is_err());
     }
 }

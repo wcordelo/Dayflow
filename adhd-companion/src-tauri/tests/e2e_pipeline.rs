@@ -604,3 +604,75 @@ fn e2e_idle_hash_dedupe_skips_monitor() {
     assert!(second.monitor.is_none());
     assert!(pipe.orch.pending_drift);
 }
+
+#[test]
+fn e2e_app_blocklist_redact_skips_monitor() {
+    let dir = tempdir().unwrap();
+    let db = Database::open(dir.path()).unwrap();
+    let mut settings = AppSettings {
+        onboarding_complete: true,
+        gemini_analysis_opt_in: false,
+        daily_nudge_budget: 20,
+        nudges_fired_today: 0,
+        quiet_hours_start: None,
+        quiet_hours_end: None,
+        app_blocklist: vec!["com.1password.1password".into()],
+        ..AppSettings::default()
+    };
+    let capture = CaptureService::new();
+    capture.set_rules(default_rules_from_settings(&settings));
+    capture.start();
+    db.replace_priorities(
+        &logical_day_key(now_unix()),
+        &["Write grant proposal".into()],
+        "checkin",
+    )
+    .unwrap();
+
+    let mut orch = OrchestratorState::default();
+    orch.guards.minutes_since_last_nudge = Some(60);
+    orch.guards.min_minutes_between_nudges = 0;
+    orch.pending_drift = true;
+    orch.pending_drift_since_unix = Some(now_unix() - 30);
+    orch.pending_confidence = Some(Confidence::High);
+
+    let mut focus = FocusContext::default();
+    let mut last_nudge = None;
+    let mut pipe = Pipeline {
+        db: &db,
+        capture: &capture,
+        orch: &mut orch,
+        settings: &mut settings,
+        focus: &mut focus,
+        data_dir: dir.path(),
+        last_nudge_present_unix: &mut last_nudge,
+    };
+
+    let step = pipe
+        .ingest_capture(CaptureEvent {
+            trigger: "app_switch".into(),
+            bundle_id: Some("com.1password.1password".into()),
+            window_title: Some("Login".into()),
+            browser_url: None,
+            idle_seconds: Some(1.0),
+            jpeg_base64: None,
+            accessibility_text: None,
+            frame_hash: Some("pw".into()),
+        })
+        .unwrap();
+    assert!(!step.capture.as_ref().unwrap().skipped);
+    assert!(matches!(
+        step.capture.as_ref().unwrap().decision,
+        PrivacyDecision::Redact { .. }
+    ));
+    assert!(step.monitor.is_none());
+    assert_eq!(step.level_after, "idle");
+    assert_eq!(pipe.settings.nudges_fired_today, 0);
+    assert!(pipe.orch.pending_drift);
+
+    // Tick while still on blocklisted focus must not fire the pending cap.
+    pipe.orch.pending_drift_since_unix = Some(now_unix() - PENDING_ANCHOR_CAP_SECS - 1);
+    let held = pipe.tick();
+    assert_eq!(held.level_after, "idle");
+    assert!(!held.presented_l1);
+}

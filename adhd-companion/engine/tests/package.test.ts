@@ -9,9 +9,11 @@ const product = join(root, "..");
 describe("package artifacts", () => {
   it("ships schema, prompts, SPEC; product has src-tauri", () => {
     expect(existsSync(join(root, "schema/schema.sql"))).toBe(true);
+    // Single source of truth: product-level prompts/ (Rust embeds these).
     for (const name of ["checkin", "analyze", "monitor", "brief"]) {
-      expect(existsSync(join(root, `prompts/${name}.md`))).toBe(true);
+      expect(existsSync(join(product, `prompts/${name}.md`))).toBe(true);
     }
+    expect(existsSync(join(root, "prompts"))).toBe(false);
     expect(existsSync(join(root, "SPEC_STATE_MACHINE.md"))).toBe(true);
     expect(existsSync(join(product, "src-tauri"))).toBe(true);
     const readme = readFileSync(join(product, "README.md"), "utf8");

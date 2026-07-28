@@ -55,7 +55,8 @@ fn quiet_nudges_for_privacy(
         PrivacyDecision::Skip { reason } if reason == "pause_watching_or_drm" => true,
         // Private browsing: pixels were intentionally not stored — no nudges either.
         PrivacyDecision::Skip { reason } if reason == "incognito" => true,
-        PrivacyDecision::Redact { reason } if reason == "incognito" => true,
+        // Any redact (incognito / app_blocklist / title_blocklist) is private focus.
+        PrivacyDecision::Redact { .. } => true,
         _ => false,
     }
 }
@@ -89,7 +90,7 @@ impl<'a> Pipeline<'a> {
         }
     }
 
-    /// DRM / pause-watching / private browsing: do not fire pending caps or escalate.
+    /// DRM / pause-watching / private browsing / blocklists: hold progression.
     fn should_quiet_nudge_progression(
         &self,
         drm_focus: bool,
@@ -105,6 +106,11 @@ impl<'a> Pipeline<'a> {
             self.focus.title.as_deref(),
             rules,
         ) {
+            return true;
+        }
+        if crate::privacy::is_app_blocked(self.focus.bundle_id.as_deref(), rules)
+            || crate::privacy::is_title_blocked(self.focus.title.as_deref(), rules)
+        {
             return true;
         }
         let now = now_unix();
