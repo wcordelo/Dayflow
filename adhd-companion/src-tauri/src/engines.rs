@@ -9,7 +9,9 @@ use serde::{Deserialize, Serialize};
 use crate::day_boundary::{logical_day_key, now_unix};
 use crate::db::Database;
 use crate::monitor::{evaluate_alignment, CaptureContext, MonitorResult};
-use crate::orchestrator::{Confidence, OrchEvent, OrchestratorState};
+use crate::orchestrator::{OrchEvent, OrchestratorState};
+#[cfg(test)]
+use crate::orchestrator::Confidence;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AnalyzeBatchResult {
