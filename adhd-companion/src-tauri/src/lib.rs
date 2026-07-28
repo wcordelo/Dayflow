@@ -317,6 +317,8 @@ fn acknowledge_nudge(
         let mut orch = state.orch.lock();
         orch.guards.overwhelm = true;
         orch.guards.paused = true;
+        // Pre-set deadline so enter_cooldown("overwhelm") keeps it (like pause).
+        orch.guards.cooldown_until_unix = Some(until);
     }
     let next = {
         let mut orch = state.orch.lock();
@@ -502,6 +504,8 @@ fn overwhelm_until_boundary(
         let mut orch = state.orch.lock();
         orch.guards.overwhelm = true;
         orch.guards.paused = true;
+        // Pre-set deadline so enter_cooldown("overwhelm") keeps it (like pause).
+        orch.guards.cooldown_until_unix = Some(until);
         orchestrator::reduce(
             &mut orch,
             OrchEvent::Acknowledge {

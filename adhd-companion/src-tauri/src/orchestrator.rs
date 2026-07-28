@@ -543,4 +543,38 @@ mod tests {
         assert_eq!(s.cooldown_until_unix, Some(until));
         assert_eq!(s.guards.cooldown_until_unix, Some(until));
     }
+
+    #[test]
+    fn overwhelm_acknowledge_preserves_pre_set_deadline() {
+        let mut s = OrchestratorState::default();
+        reduce(
+            &mut s,
+            OrchEvent::DriftDetected {
+                confidence: Confidence::High,
+            },
+            0,
+        );
+        reduce(
+            &mut s,
+            OrchEvent::EventAnchor {
+                anchor: "app_switch".into(),
+            },
+            0,
+        );
+        assert_eq!(s.level, NudgeLevel::L1);
+        let until = 10 + 8 * 3600;
+        s.guards.cooldown_until_unix = Some(until);
+        s.guards.overwhelm = true;
+        s.guards.paused = true;
+        reduce(
+            &mut s,
+            OrchEvent::Acknowledge {
+                reason: "overwhelm".into(),
+            },
+            10,
+        );
+        assert_eq!(s.level, NudgeLevel::Idle);
+        assert_eq!(s.cooldown_until_unix, Some(until));
+        assert_eq!(s.guards.cooldown_until_unix, Some(until));
+    }
 }

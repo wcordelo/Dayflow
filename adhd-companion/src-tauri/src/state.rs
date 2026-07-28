@@ -321,6 +321,18 @@ impl AppState {
             orch.level = NudgeLevel::Idle;
             orch.level_entered_at_unix = None;
         }
+        // Resync guards from hydrated settings so overwhelm / pause / quiet /
+        // budget / companion_enabled apply before the first tick or capture.
+        let active = db
+            .list_priorities(&today)
+            .unwrap_or_default()
+            .iter()
+            .filter(|p| p.status == "active")
+            .count() as u32;
+        crate::guards::sync_guards(&mut orch, &s, active, None, None, None, now);
+        if let Some(t) = last_nudge {
+            orch.guards.minutes_since_last_nudge = Some(((now - t) / 60).max(0));
+        }
         save_orchestrator(&db, &orch, last_nudge);
 
         let capture = CaptureService::new();
@@ -373,5 +385,35 @@ mod tests {
         assert_eq!(loaded.escalate_after_unix, orch.escalate_after_unix);
         assert_eq!(loaded.consecutive_ignores, 2);
         assert_eq!(*state.last_nudge_present_unix.lock(), last);
+    }
+
+    #[test]
+    fn boot_syncs_guards_from_settings_deadlines() {
+        let dir = tempdir().unwrap();
+        let db = Database::open(dir.path()).unwrap();
+        let today = crate::day_boundary::logical_day_key(now_unix());
+        let _ = db.set_setting("nudges_fired_today_day", &today);
+        let until = now_unix() + 3600;
+        let _ = db.set_setting("overwhelm_until", &until.to_string());
+        let _ = db.set_setting("pause_nudges_until", &until.to_string());
+        let _ = db.set_setting("companion_enabled", "0");
+        let _ = db.set_setting("nudges_fired_today", "3");
+        let _ = db.set_setting("daily_nudge_budget", "10");
+        // Orch snapshot has stale cleared guards — boot must resync.
+        let mut orch = OrchestratorState::default();
+        orch.guards.overwhelm = false;
+        orch.guards.paused = false;
+        orch.guards.companion_enabled = true;
+        orch.guards.daily_budget_remaining = 10;
+        save_orchestrator(&db, &orch, Some(now_unix() - 600));
+
+        let state = AppState::new(db, dir.path().to_path_buf());
+        let g = state.orch.lock().guards.clone();
+        assert!(g.overwhelm, "boot must sync overwhelm from settings");
+        assert!(g.paused, "boot must sync pause from settings");
+        assert!(!g.companion_enabled);
+        assert_eq!(g.daily_budget_remaining, 7);
+        assert_eq!(g.cooldown_until_unix, Some(until));
+        assert_eq!(g.minutes_since_last_nudge, Some(10));
     }
 }

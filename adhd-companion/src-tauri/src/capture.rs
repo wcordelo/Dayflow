@@ -162,12 +162,31 @@ impl CaptureService {
             PrivacyDecision::Allow | PrivacyDecision::Redact { .. } => {}
         }
 
-        // Compute / accept frame hash for idle_fallback dedupe
+        // Compute / accept frame hash for idle_fallback / visual_change dedupe.
+        // When there is no real JPEG, do not hash the shared placeholder bytes —
+        // that would make every subsequent idle tick permanently hash_dedupe.
+        // Fingerprint by focus so same-focus idles still dedupe, but focus
+        // changes still capture.
+        let has_jpeg = event
+            .jpeg_base64
+            .as_ref()
+            .map(|s| !s.is_empty())
+            .unwrap_or(false);
         let bytes = decode_jpeg(event.jpeg_base64.as_deref());
-        let hash = event
-            .frame_hash
-            .clone()
-            .unwrap_or_else(|| hash_bytes(&bytes));
+        let hash = event.frame_hash.clone().unwrap_or_else(|| {
+            if has_jpeg {
+                hash_bytes(&bytes)
+            } else {
+                let fingerprint = format!(
+                    "noface|{}|{}|{}|{}",
+                    event.trigger,
+                    event.bundle_id.as_deref().unwrap_or(""),
+                    event.window_title.as_deref().unwrap_or(""),
+                    event.browser_url.as_deref().unwrap_or("")
+                );
+                hash_bytes(fingerprint.as_bytes())
+            }
+        });
         event.frame_hash = Some(hash.clone());
 
         if event.trigger == "idle_fallback" || event.trigger == "visual_change" {
@@ -332,5 +351,32 @@ mod tests {
         std::thread::sleep(Duration::from_millis(220));
         let r2 = cap.handle_event(&db, ev, None, 0).unwrap();
         assert!(r2.deduped);
+    }
+
+    #[test]
+    fn idle_without_jpeg_dedupes_same_focus_not_across_focus() {
+        let dir = tempdir().unwrap();
+        let db = Database::open(dir.path()).unwrap();
+        let cap = CaptureService::new();
+        cap.start();
+        let mut a = CaptureEvent {
+            trigger: "idle_fallback".into(),
+            bundle_id: Some("com.apple.Safari".into()),
+            window_title: Some("Docs".into()),
+            browser_url: None,
+            idle_seconds: Some(8.0),
+            jpeg_base64: None,
+            accessibility_text: None,
+            frame_hash: None,
+        };
+        let r1 = cap.handle_event(&db, a.clone(), None, 0).unwrap();
+        assert!(!r1.skipped && !r1.deduped);
+        std::thread::sleep(Duration::from_millis(220));
+        let r2 = cap.handle_event(&db, a.clone(), None, 1).unwrap();
+        assert!(r2.deduped, "same focus without JPEG must still hash_dedupe");
+        std::thread::sleep(Duration::from_millis(220));
+        a.window_title = Some("Mail".into());
+        let r3 = cap.handle_event(&db, a, None, 2).unwrap();
+        assert!(!r3.deduped && !r3.skipped, "focus change must escape placeholder dedupe");
     }
 }
