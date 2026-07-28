@@ -22,6 +22,7 @@ use tauri::{
     Manager,
 };
 use tauri_plugin_autostart::MacosLauncher;
+use tauri_plugin_autostart::ManagerExt as AutostartExt;
 
 use bus::BusEvent;
 use capture::CaptureEvent;
@@ -313,6 +314,7 @@ fn get_settings(state: tauri::State<'_, Arc<AppState>>) -> AppSettings {
 
 #[tauri::command]
 fn update_settings(
+    app: tauri::AppHandle,
     state: tauri::State<'_, Arc<AppState>>,
     patch: AppSettings,
 ) -> Result<AppSettings, String> {
@@ -325,6 +327,8 @@ fn update_settings(
         merged.pause_nudges_until = current.pause_nudges_until;
         merged.pause_capture_until = current.pause_capture_until;
         merged.overwhelm_until = current.overwhelm_until;
+        // Keep launch-at-login request bit aligned with the Launch at login toggle.
+        merged.launch_at_login_requested = merged.autostart;
         merged
     };
     {
@@ -360,7 +364,20 @@ fn update_settings(
         .capture
         .set_rules(guards::default_rules_from_settings(&merged));
     *state.settings.lock() = merged.clone();
+    apply_autostart_preference(&app, merged.autostart);
     Ok(merged)
+}
+
+fn apply_autostart_preference(app: &tauri::AppHandle, enabled: bool) {
+    let mgr = app.autolaunch();
+    let result = if enabled {
+        mgr.enable()
+    } else {
+        mgr.disable()
+    };
+    if let Err(e) = result {
+        eprintln!("autostart sync failed: {e}");
+    }
 }
 
 #[tauri::command]
@@ -580,6 +597,8 @@ pub fn run() {
             if app_state.settings.lock().onboarding_complete {
                 app_state.capture.start();
             }
+            // Align OS login-item with persisted preference on boot.
+            apply_autostart_preference(app.handle(), app_state.settings.lock().autostart);
             runtime::start_runtime(app.handle().clone(), app_state.clone());
             Ok(())
         })

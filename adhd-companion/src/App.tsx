@@ -537,10 +537,59 @@ export default function App() {
               type="checkbox"
               checked={settings.autostart}
               onChange={(e) =>
-                setSettings({ ...settings, autostart: e.target.checked })
+                setSettings({
+                  ...settings,
+                  autostart: e.target.checked,
+                  launch_at_login_requested: e.target.checked,
+                })
               }
             />
-            Launch at login (requested)
+            Launch at login
+          </label>
+          <label className="row">
+            <input
+              type="checkbox"
+              checked={settings.l2_l3_break_focus}
+              onChange={(e) =>
+                setSettings({
+                  ...settings,
+                  l2_l3_break_focus: e.target.checked,
+                })
+              }
+            />
+            L2/L3 nudges break focus (always on top)
+          </label>
+          <label>
+            Quiet hours start (0–23, blank = off)
+            <input
+              type="number"
+              min={0}
+              max={23}
+              value={settings.quiet_hours_start ?? ""}
+              onChange={(e) =>
+                setSettings({
+                  ...settings,
+                  quiet_hours_start:
+                    e.target.value === "" ? null : Number(e.target.value),
+                })
+              }
+            />
+          </label>
+          <label>
+            Quiet hours end (0–23, blank = off)
+            <input
+              type="number"
+              min={0}
+              max={23}
+              value={settings.quiet_hours_end ?? ""}
+              onChange={(e) =>
+                setSettings({
+                  ...settings,
+                  quiet_hours_end:
+                    e.target.value === "" ? null : Number(e.target.value),
+                })
+              }
+            />
           </label>
           <label>
             App blocklist (one bundle ID per line)
