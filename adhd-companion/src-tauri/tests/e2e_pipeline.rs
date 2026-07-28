@@ -192,3 +192,67 @@ fn e2e_bus_debounce_and_quiet_hours() {
     assert!(!in_quiet_hours(&s, 12));
     assert!(meeting_heuristic(Some("us.zoom.xos"), Some("Zoom"), None));
 }
+
+#[test]
+fn e2e_tick_budgets_and_drm_holds_progression() {
+    let dir = tempdir().unwrap();
+    let db = Database::open(dir.path()).unwrap();
+    let mut settings = AppSettings {
+        onboarding_complete: true,
+        gemini_analysis_opt_in: false,
+        daily_nudge_budget: 20,
+        nudges_fired_today: 0,
+        quiet_hours_start: None,
+        quiet_hours_end: None,
+        ..AppSettings::default()
+    };
+    let capture = CaptureService::new();
+    capture.set_rules(default_rules_from_settings(&settings));
+    capture.start();
+    db.replace_priorities(
+        &logical_day_key(now_unix()),
+        &["Write grant proposal".into()],
+        "checkin",
+    )
+    .unwrap();
+
+    let mut orch = OrchestratorState::default();
+    orch.guards.minutes_since_last_nudge = Some(60);
+    orch.guards.min_minutes_between_nudges = 0;
+    // Pending drift past anchor cap → tick should fire L1 and count budget.
+    orch.pending_drift = true;
+    orch.pending_drift_since_unix = Some(now_unix() - PENDING_ANCHOR_CAP_SECS - 1);
+    orch.pending_confidence = Some(Confidence::High);
+
+    let mut focus = FocusContext {
+        bundle_id: Some("com.apple.Safari".into()),
+        title: Some("Docs".into()),
+        url: None,
+    };
+    let mut last_nudge = None;
+    let mut pipe = Pipeline {
+        db: &db,
+        capture: &capture,
+        orch: &mut orch,
+        settings: &mut settings,
+        focus: &mut focus,
+        data_dir: dir.path(),
+        last_nudge_present_unix: &mut last_nudge,
+    };
+
+    let step = pipe.tick();
+    assert_eq!(step.level_after, "L1");
+    assert!(step.presented_l1);
+    assert_eq!(pipe.settings.nudges_fired_today, 1);
+    assert!(pipe.last_nudge_present_unix.is_some());
+
+    // Switch focus to DRM — tick must not escalate or present.
+    pipe.focus.bundle_id = Some("com.netflix.Netflix".into());
+    pipe.orch.escalate_after_unix = Some(now_unix() - 1);
+    let held = pipe.tick();
+    assert_eq!(held.level_after, "L1");
+    assert!(!held.presented_l1);
+    assert!(!held.should_show_l2);
+    assert!(!held.should_show_l3);
+    assert_eq!(pipe.settings.nudges_fired_today, 1);
+}

@@ -1,5 +1,7 @@
 //! End-to-end pipeline (capture → monitor → orch) — unit/E2E testable without Tauri UI.
 
+use std::sync::atomic::Ordering;
+
 use serde::{Deserialize, Serialize};
 
 use crate::capture::{CaptureEvent, CaptureResult, CaptureService};
@@ -66,6 +68,76 @@ pub struct Pipeline<'a> {
 }
 
 impl<'a> Pipeline<'a> {
+    fn sync_runtime_guards(&mut self, day: &str) {
+        ensure_nudge_budget_day(self.settings, self.db, day, self.orch);
+        let priorities = self.db.list_priorities(day).unwrap_or_default();
+        sync_guards(
+            self.orch,
+            self.settings,
+            priorities.iter().filter(|p| p.status == "active").count() as u32,
+            self.focus.bundle_id.as_deref(),
+            self.focus.title.as_deref(),
+            self.focus.url.as_deref(),
+            now_unix(),
+        );
+        if let Some(last) = *self.last_nudge_present_unix {
+            self.orch.guards.minutes_since_last_nudge =
+                Some(((now_unix() - last) / 60).max(0));
+        }
+    }
+
+    /// DRM / pause-watching: do not fire pending caps or escalate surfaces.
+    fn should_quiet_nudge_progression(&self, drm_focus: bool) -> bool {
+        if drm_focus {
+            return true;
+        }
+        let now = now_unix();
+        if self
+            .settings
+            .pause_capture_until
+            .map(|t| now < t)
+            .unwrap_or(false)
+        {
+            return true;
+        }
+        self.capture.pause_capture.load(Ordering::SeqCst)
+    }
+
+    fn clear_expired_cooldown(&mut self) {
+        let now = now_unix();
+        if let Some(cd) = self.orch.cooldown_until_unix {
+            if now >= cd {
+                self.orch.cooldown_until_unix = None;
+                self.orch.guards.cooldown_until_unix = None;
+            }
+        }
+    }
+
+    /// Budget + spacing once per new idle→elevated nudge session.
+    fn record_new_nudge_session(
+        &mut self,
+        day: &str,
+        from: &str,
+        reason: &str,
+        confidence: Option<&str>,
+    ) {
+        self.settings.nudges_fired_today += 1;
+        *self.last_nudge_present_unix = Some(now_unix());
+        let _ = self.db.set_setting(
+            "nudges_fired_today",
+            &self.settings.nudges_fired_today.to_string(),
+        );
+        let _ = self.db.log_nudge_event(
+            day,
+            self.orch.level.as_str(),
+            Some(from),
+            "present",
+            Some(reason),
+            confidence,
+            self.orch.escalate_after_unix,
+        );
+    }
+
     pub fn ingest_capture(&mut self, event: CaptureEvent) -> Result<PipelineStepResult, String> {
         let level_before = self.orch.level.as_str().to_string();
         self.focus.bundle_id = event.bundle_id.clone();
@@ -123,25 +195,12 @@ impl<'a> Pipeline<'a> {
             {
                 // Budget once per new nudge session; L1 UI only when actually entering L1.
                 presented_l1 = self.orch.level == NudgeLevel::L1;
-                self.settings.nudges_fired_today += 1;
-                *self.last_nudge_present_unix = Some(now_unix());
-                let _ = self.db.set_setting(
-                    "nudges_fired_today",
-                    &self.settings.nudges_fired_today.to_string(),
-                );
-                let _ = self.db.log_nudge_event(
-                    &day,
-                    self.orch.level.as_str(),
-                    Some("idle"),
-                    "present",
-                    Some("monitor_drift"),
-                    Some(match m.confidence {
-                        crate::orchestrator::Confidence::Low => "low",
-                        crate::orchestrator::Confidence::Medium => "medium",
-                        crate::orchestrator::Confidence::High => "high",
-                    }),
-                    self.orch.escalate_after_unix,
-                );
+                let conf = match m.confidence {
+                    crate::orchestrator::Confidence::Low => "low",
+                    crate::orchestrator::Confidence::Medium => "medium",
+                    crate::orchestrator::Confidence::High => "high",
+                };
+                self.record_new_nudge_session(&day, "idle", "monitor_drift", Some(conf));
             }
             Some(m)
         };
@@ -167,28 +226,39 @@ impl<'a> Pipeline<'a> {
     pub fn tick(&mut self) -> PipelineStepResult {
         let level_before = self.orch.level.as_str().to_string();
         let day = logical_day_key(now_unix());
-        ensure_nudge_budget_day(self.settings, self.db, &day, self.orch);
-        let priorities = self.db.list_priorities(&day).unwrap_or_default();
-        sync_guards(
-            self.orch,
-            self.settings,
-            priorities.iter().filter(|p| p.status == "active").count() as u32,
-            self.focus.bundle_id.as_deref(),
-            self.focus.title.as_deref(),
-            self.focus.url.as_deref(),
-            now_unix(),
-        );
-        if let Some(last) = *self.last_nudge_present_unix {
-            self.orch.guards.minutes_since_last_nudge =
-                Some(((now_unix() - last) / 60).max(0));
-        }
-        crate::orchestrator::reduce(self.orch, OrchEvent::Tick, now_unix());
+        self.sync_runtime_guards(&day);
+
         let rules = self.capture.rules.read().clone();
         let suppressed_l3_drm =
             should_suppress_l3_for_focus(self.focus.bundle_id.as_deref(), &rules);
+        if self.should_quiet_nudge_progression(suppressed_l3_drm) {
+            // Hold pending/escalation while DRM or pause-watching; still expire cooldowns.
+            self.clear_expired_cooldown();
+            return PipelineStepResult {
+                capture: None,
+                monitor: None,
+                level_before: level_before.clone(),
+                level_after: level_before,
+                presented_l1: false,
+                should_show_l2: false,
+                should_show_l3: false,
+                suppressed_l3_drm: true,
+            };
+        }
+
+        crate::orchestrator::reduce(self.orch, OrchEvent::Tick, now_unix());
         let level_after = self.orch.level.as_str().to_string();
         let (presented_l1, should_show_l2, should_show_l3) =
             presentation_flags(&level_before, &level_after, suppressed_l3_drm);
+        if level_before == "idle" && level_after != "idle" {
+            let reason = self
+                .orch
+                .last_transition
+                .as_ref()
+                .map(|t| t.reason.clone())
+                .unwrap_or_else(|| "tick".into());
+            self.record_new_nudge_session(&day, "idle", &reason, None);
+        }
         PipelineStepResult {
             capture: None,
             monitor: None,
@@ -204,33 +274,32 @@ impl<'a> Pipeline<'a> {
     pub fn wake(&mut self) -> PipelineStepResult {
         let level_before = self.orch.level.as_str().to_string();
         // Resume capture after unlock unless pause-watching
-        if self.capture.pause_nudges_only.load(std::sync::atomic::Ordering::SeqCst) {
-            self.capture
-                .pause_capture
-                .store(false, std::sync::atomic::Ordering::SeqCst);
+        if self.capture.pause_nudges_only.load(Ordering::SeqCst) {
+            self.capture.pause_capture.store(false, Ordering::SeqCst);
         }
         // Match tick/ingest: re-evaluate budget + guards after sleep (quiet hours,
         // meeting, pause, spacing can all change across a lid-close interval).
         let day = logical_day_key(now_unix());
-        ensure_nudge_budget_day(self.settings, self.db, &day, self.orch);
-        let priorities = self.db.list_priorities(&day).unwrap_or_default();
-        sync_guards(
-            self.orch,
-            self.settings,
-            priorities.iter().filter(|p| p.status == "active").count() as u32,
-            self.focus.bundle_id.as_deref(),
-            self.focus.title.as_deref(),
-            self.focus.url.as_deref(),
-            now_unix(),
-        );
-        if let Some(last) = *self.last_nudge_present_unix {
-            self.orch.guards.minutes_since_last_nudge =
-                Some(((now_unix() - last) / 60).max(0));
-        }
-        crate::orchestrator::reduce(self.orch, OrchEvent::Wake, now_unix());
+        self.sync_runtime_guards(&day);
+
         let rules = self.capture.rules.read().clone();
         let suppressed_l3_drm =
             should_suppress_l3_for_focus(self.focus.bundle_id.as_deref(), &rules);
+        if self.should_quiet_nudge_progression(suppressed_l3_drm) {
+            self.clear_expired_cooldown();
+            return PipelineStepResult {
+                capture: None,
+                monitor: None,
+                level_before: level_before.clone(),
+                level_after: level_before,
+                presented_l1: false,
+                should_show_l2: false,
+                should_show_l3: false,
+                suppressed_l3_drm: true,
+            };
+        }
+
+        crate::orchestrator::reduce(self.orch, OrchEvent::Wake, now_unix());
         let level_after = self.orch.level.as_str().to_string();
         let (presented_l1, should_show_l2, should_show_l3) =
             presentation_flags(&level_before, &level_after, suppressed_l3_drm);
@@ -238,6 +307,15 @@ impl<'a> Pipeline<'a> {
         // Do NOT re-fire L1 notifications unless wake actually transitioned into L1.
         let should_show_l2 = should_show_l2 || level_after == "L2";
         let should_show_l3 = should_show_l3 || (level_after == "L3" && !suppressed_l3_drm);
+        if level_before == "idle" && level_after != "idle" {
+            let reason = self
+                .orch
+                .last_transition
+                .as_ref()
+                .map(|t| t.reason.clone())
+                .unwrap_or_else(|| "wake".into());
+            self.record_new_nudge_session(&day, "idle", &reason, None);
+        }
         PipelineStepResult {
             capture: None,
             monitor: None,
@@ -251,9 +329,7 @@ impl<'a> Pipeline<'a> {
     }
 
     pub fn sleep_lock(&mut self) {
-        self.capture
-            .pause_capture
-            .store(true, std::sync::atomic::Ordering::SeqCst);
+        self.capture.pause_capture.store(true, Ordering::SeqCst);
     }
 
     pub fn run_analyze(&self) -> Result<crate::engines::AnalyzeBatchResult, String> {
