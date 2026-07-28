@@ -326,13 +326,23 @@ export function reduce(
 
     case "drift_detected": {
       if (state.level !== "idle") return state;
-      const withConf = mergeGuards(state, { confidence: event.confidence });
       if (event.confidence === "low") {
+        // Never fire on low. Preserve an existing medium/high pending wait —
+        // weak idle_fallback observations must not drop the queue.
+        if (state.pendingDrift) {
+          const kept = state.pendingConfidence ?? state.guards.confidence;
+          return {
+            ...mergeGuards(state, { confidence: kept }),
+            lastTransition: {
+              from: state.level,
+              to: state.level,
+              atUnix: now,
+              reason: "drift_low_confidence_ignored_pending_kept",
+            },
+          };
+        }
         return {
-          ...withConf,
-          pendingDrift: false,
-          pendingDriftSinceUnix: null,
-          pendingConfidence: null,
+          ...mergeGuards(state, { confidence: event.confidence }),
           lastTransition: {
             from: state.level,
             to: state.level,
@@ -341,6 +351,7 @@ export function reduce(
           },
         };
       }
+      const withConf = mergeGuards(state, { confidence: event.confidence });
       // Wait for event anchor (caller may immediately send one).
       // Preserve pendingDriftSinceUnix so repeated drift signals (e.g. idle_fallback)
       // cannot restart the ~10m pending-anchor cap.

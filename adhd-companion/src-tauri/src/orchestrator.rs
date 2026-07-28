@@ -326,12 +326,22 @@ pub fn reduce(state: &mut OrchestratorState, event: OrchEvent, now: i64) {
             if state.level != NudgeLevel::Idle {
                 return;
             }
-            state.guards.confidence = confidence;
             if confidence == Confidence::Low {
-                // Mirror TS: low-confidence drift clears any pending wait, never fires.
-                state.pending_drift = false;
-                state.pending_drift_since_unix = None;
-                state.pending_confidence = None;
+                // Never fire on low. Do not clear an existing medium/high pending
+                // wait — weak idle_fallback observations must not drop the queue.
+                if state.pending_drift {
+                    if let Some(c) = state.pending_confidence {
+                        state.guards.confidence = c;
+                    }
+                    state.last_transition = Some(Transition {
+                        from: "idle".into(),
+                        to: "idle".into(),
+                        at_unix: now,
+                        reason: "drift_low_confidence_ignored_pending_kept".into(),
+                    });
+                    return;
+                }
+                state.guards.confidence = confidence;
                 state.last_transition = Some(Transition {
                     from: "idle".into(),
                     to: "idle".into(),
@@ -340,6 +350,7 @@ pub fn reduce(state: &mut OrchestratorState, event: OrchEvent, now: i64) {
                 });
                 return;
             }
+            state.guards.confidence = confidence;
             state.pending_drift = true;
             // Keep the original wait start so idle_fallback drift refreshes cannot
             // restart the ~10m pending-anchor cap indefinitely.
@@ -477,7 +488,7 @@ mod tests {
     }
 
     #[test]
-    fn low_confidence_clears_stale_pending() {
+    fn low_confidence_preserves_stronger_pending() {
         let mut s = OrchestratorState::default();
         reduce(
             &mut s,
@@ -494,8 +505,12 @@ mod tests {
             },
             1001,
         );
-        assert!(!s.pending_drift);
-        assert!(s.pending_confidence.is_none());
+        assert!(
+            s.pending_drift,
+            "low drift must not clear a stronger pending wait"
+        );
+        assert_eq!(s.pending_confidence, Some(Confidence::High));
+        assert_eq!(s.pending_drift_since_unix, Some(1000));
         reduce(
             &mut s,
             OrchEvent::EventAnchor {
@@ -503,7 +518,7 @@ mod tests {
             },
             1002,
         );
-        assert_eq!(s.level, NudgeLevel::Idle);
+        assert_eq!(s.level, NudgeLevel::L1);
     }
 
     #[test]

@@ -154,7 +154,7 @@ pub fn run_monitor(
             }
         }
     } else if result.verdict == "drift" {
-        // Explicit low-confidence drift observation — clear pending (orch rule).
+        // Low-confidence drift (never fires). Orch preserves any stronger pending.
         crate::orchestrator::reduce(
             state,
             OrchEvent::DriftDetected {
@@ -543,7 +543,7 @@ mod tests {
     }
 
     #[test]
-    fn low_confidence_drift_clears_pending() {
+    fn low_confidence_drift_preserves_stronger_pending() {
         let dir = tempdir().unwrap();
         let db = Database::open(dir.path()).unwrap();
         let day = logical_day_key(now_unix());
@@ -569,7 +569,8 @@ mod tests {
         .unwrap();
         assert_eq!(result.verdict, "drift");
         assert!(!result.recommend_nudge);
-        assert!(!orch.pending_drift);
+        assert!(orch.pending_drift);
+        assert_eq!(orch.pending_confidence, Some(Confidence::High));
     }
 
     #[test]

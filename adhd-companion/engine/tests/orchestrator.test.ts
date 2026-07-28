@@ -45,6 +45,19 @@ describe("orchestrator state machine", () => {
     expect(state.pendingDrift).toBe(false);
   });
 
+  it("low-confidence drift preserves a stronger pending wait", () => {
+    const clock = mutableClock(1_700_000_000);
+    let state = createInitialState();
+    state = reduce(state, { type: "drift_detected", confidence: "high" }, clock);
+    expect(state.pendingDrift).toBe(true);
+    state = reduce(state, { type: "drift_detected", confidence: "low" }, clock);
+    expect(state.pendingDrift).toBe(true);
+    expect(state.pendingConfidence).toBe("high");
+    expect(state.pendingDriftSinceUnix).toBe(1_700_000_000);
+    state = reduce(state, { type: "event_anchor", anchor: "app_switch" }, clock);
+    expect(state.level).toBe("L1");
+  });
+
   it("aligned clears pending drift while idle (mirrors Rust)", () => {
     const clock = mutableClock(1_700_000_000);
     let state = createInitialState();
