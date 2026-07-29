@@ -162,8 +162,14 @@ export class CompanionStateDO extends DurableObject<Env> {
   async alarm() {
     const state = await this.getState();
     const now = Date.now();
-    const planned = (await this.ctx.storage.get<{ kind: NudgeKind; at: number }>("nextAlarm")) ?? null;
+    const planned =
+      (await this.ctx.storage.get<{ kind: NudgeKind | null; at: number }>("nextAlarm")) ?? null;
     await this.ctx.storage.delete("nextAlarm");
+
+    if (planned && planned.kind === null) {
+      await this.scheduleNextAlarm();
+      return;
+    }
 
     if (state.settings.overwhelmUntil && state.settings.overwhelmUntil * 1000 > now) {
       await this.scheduleNextAlarm();
@@ -229,6 +235,7 @@ export class CompanionStateDO extends DurableObject<Env> {
     let pushed = false;
     const userId = this.ctx.id.name;
     if (
+      !hadWs &&
       userId &&
       this.env.VAPID_PUBLIC_KEY &&
       this.env.VAPID_PRIVATE_KEY &&
@@ -319,6 +326,8 @@ export class CompanionStateDO extends DurableObject<Env> {
     }
     if (kind === "overwhelm_on") {
       state.settings.overwhelmUntil = nextDayBoundaryUnix(Date.now(), state.settings.ianaTimeZone);
+      state.settings.engagement.missedNudges = 0;
+      state.settings.engagement.lastNudgeAt = null;
     }
     if (kind === "overwhelm_off") {
       state.settings.overwhelmUntil = null;
@@ -396,7 +405,7 @@ export class CompanionStateDO extends DurableObject<Env> {
     if (!filtered.length) {
       // No scheduled nudges — wake at next day boundary to re-evaluate.
       const boundaryMs = nextDayBoundaryUnix(now, tz) * 1000;
-      await this.ctx.storage.put("nextAlarm", { kind: "morning" as NudgeKind, at: boundaryMs });
+      await this.ctx.storage.put("nextAlarm", { kind: null, at: boundaryMs });
       await this.ctx.storage.setAlarm(boundaryMs);
       return;
     }
