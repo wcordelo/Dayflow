@@ -92,11 +92,19 @@ app.get("/api/events", async (c) => {
 app.post("/api/mutate", async (c) => {
   const user = await resolveUser(c);
   if (!user) return c.json({ error: "unauthorized" }, 401);
-  if (!(await userHasHealthConsent(c.env, user.id))) {
+  const bodyText = await c.req.text();
+  let kind: string | undefined;
+  try {
+    kind = (JSON.parse(bodyText) as { kind?: string }).kind;
+  } catch {
+    /* invalid JSON handled by DO */
+  }
+  const overwhelmBypass = kind === "overwhelm_on" || kind === "overwhelm_off";
+  if (!overwhelmBypass && !(await userHasHealthConsent(c.env, user.id))) {
     return c.json({ error: "health_consent_required" }, 403);
   }
   const stub = doStub(c.env, user.id);
-  return stub.fetch("https://do/mutate", { method: "POST", body: await c.req.text() });
+  return stub.fetch("https://do/mutate", { method: "POST", body: bodyText });
 });
 
 app.post("/api/settings", async (c) => {
@@ -184,9 +192,7 @@ app.get("/api/ws", async (c) => {
   const user = await resolveUser(c);
   if (!user) return c.text("unauthorized", 401);
   const stub = doStub(c.env, user.id);
-  return stub.fetch("https://do/", {
-    headers: { Upgrade: "websocket" },
-  });
+  return stub.fetch(new Request("https://do/", c.req.raw));
 });
 
 function doStub(env: Env, userId: string) {
