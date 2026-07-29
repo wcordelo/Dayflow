@@ -60,8 +60,6 @@ const DDL = [
  * OpenTag pattern: SQLite DO + alarm for owed nudge work.
  */
 export class CompanionStateDO extends DurableObject<Env> {
-  private sessions = new Set<WebSocket>();
-
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     this.ctx.blockConcurrencyWhile(async () => {
@@ -86,7 +84,6 @@ export class CompanionStateDO extends DurableObject<Env> {
       const pair = new WebSocketPair();
       const [client, server] = Object.values(pair);
       this.ctx.acceptWebSocket(server);
-      this.sessions.add(server);
       server.send(JSON.stringify({ type: "hello", state: await this.getState() }));
       return new Response(null, { status: 101, webSocket: client });
     }
@@ -155,18 +152,16 @@ export class CompanionStateDO extends DurableObject<Env> {
     }
   }
 
-  async webSocketClose(ws: WebSocket) {
-    this.sessions.delete(ws);
-  }
+  async webSocketClose(_ws: WebSocket) {}
 
   async alarm() {
     const state = await this.getState();
     const now = Date.now();
     const planned =
-      (await this.ctx.storage.get<{ kind: NudgeKind | null; at: number }>("nextAlarm")) ?? null;
+      (await this.ctx.storage.get<{ kinds: NudgeKind[] | null; at: number }>("nextAlarm")) ?? null;
     await this.ctx.storage.delete("nextAlarm");
 
-    if (planned && planned.kind === null) {
+    if (planned && planned.kinds === null) {
       await this.scheduleNextAlarm();
       return;
     }
@@ -187,8 +182,12 @@ export class CompanionStateDO extends DurableObject<Env> {
       return;
     }
 
-    const kind = planned?.kind ?? this.nudgeKindForHour(state, hour);
-    if (!kind) {
+    const kinds =
+      planned?.kinds?.length ? planned.kinds : (() => {
+        const k = this.nudgeKindForHour(state, hour);
+        return k ? [k] : [];
+      })();
+    if (!kinds.length) {
       await this.scheduleNextAlarm();
       return;
     }
@@ -207,8 +206,11 @@ export class CompanionStateDO extends DurableObject<Env> {
       }
     }
 
-    const delivered = await this.deliverNudge(kind, hour);
-    if (delivered) {
+    let anyDelivered = false;
+    for (const kind of kinds) {
+      if (await this.deliverNudge(kind, hour)) anyDelivered = true;
+    }
+    if (anyDelivered) {
       state.settings.engagement.lastNudgeAt = Math.floor(now / 1000);
       await this.ctx.storage.put("state", state);
     }
@@ -229,7 +231,7 @@ export class CompanionStateDO extends DurableObject<Env> {
       kind,
       hour,
     };
-    const hadWs = this.sessions.size > 0;
+    const hadWs = this.ctx.getWebSockets().length > 0;
     this.broadcast(msg);
 
     let pushed = false;
@@ -365,11 +367,11 @@ export class CompanionStateDO extends DurableObject<Env> {
 
   private broadcast(msg: unknown) {
     const data = JSON.stringify(msg);
-    for (const ws of this.sessions) {
+    for (const ws of this.ctx.getWebSockets()) {
       try {
         ws.send(data);
       } catch {
-        this.sessions.delete(ws);
+        /* ignore */
       }
     }
   }
@@ -405,14 +407,15 @@ export class CompanionStateDO extends DurableObject<Env> {
     if (!filtered.length) {
       // No scheduled nudges — wake at next day boundary to re-evaluate.
       const boundaryMs = nextDayBoundaryUnix(now, tz) * 1000;
-      await this.ctx.storage.put("nextAlarm", { kind: null, at: boundaryMs });
+      await this.ctx.storage.put("nextAlarm", { kinds: null, at: boundaryMs });
       await this.ctx.storage.setAlarm(boundaryMs);
       return;
     }
 
     filtered.sort((a, b) => a.at - b.at);
-    const next = filtered[0]!;
-    await this.ctx.storage.put("nextAlarm", next);
-    await this.ctx.storage.setAlarm(next.at);
+    const nextAt = filtered[0]!.at;
+    const kinds = filtered.filter((c) => c.at === nextAt).map((c) => c.kind);
+    await this.ctx.storage.put("nextAlarm", { kinds, at: nextAt });
+    await this.ctx.storage.setAlarm(nextAt);
   }
 }
