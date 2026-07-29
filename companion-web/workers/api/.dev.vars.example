@@ -1,0 +1,10 @@
+# Copy to .dev.vars for local wrangler
+WORKOS_API_KEY=
+WORKOS_CLIENT_ID=
+WORKOS_COOKIE_PASSWORD=dev-cookie-password-must-be-32chars!!
+OPENROUTER_FALLBACK_KEY=
+VAPID_PUBLIC_KEY=
+VAPID_PRIVATE_KEY=
+VAPID_SUBJECT=mailto:companion@localhost
+KEY_ENCRYPTION_SECRET=dev-key-encryption-secret-32b!!
+DEV_AUTH_BYPASS=true

@@ -1,0 +1,28 @@
+# ADHD Companion API — OpenTag-style Worker + DO
+name = "companion-api"
+main = "src/worker.ts"
+compatibility_date = "2026-06-01"
+compatibility_flags = ["nodejs_compat"]
+
+[[durable_objects.bindings]]
+name = "COMPANION_STATE"
+class_name = "CompanionStateDO"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["CompanionStateDO"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "companion-db"
+database_id = "00000000-0000-0000-0000-000000000000"
+
+[[kv_namespaces]]
+binding = "KV"
+id = "00000000-0000-0000-0000-000000000000"
+
+[vars]
+APP_HOMEPAGE_URL = "http://localhost:5173"
+AUTH_REDIRECT_URI = "http://localhost:8787/api/auth/callback"
+LITELLM_BASE_URL = "https://openrouter.ai/api/v1"
+DEV_AUTH_BYPASS = "true"
