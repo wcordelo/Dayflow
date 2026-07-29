@@ -10,6 +10,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@block65/webcrypto-web-push": "^1.0.2",
     "@companion/shared": "*",
     "@workos-inc/node": "^10.8.0",
     "hono": "^4.7.2"

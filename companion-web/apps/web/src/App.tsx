@@ -60,6 +60,54 @@ export function App() {
     void refresh();
   }, [refresh]);
 
+  // Real-time nudge relay (CompanionStateDO WebSocket).
+  useEffect(() => {
+    if (!user) return;
+    const proto = window.location.protocol === "https:" ? "wss" : "ws";
+    const wsUrl = `${proto}://${window.location.host}/api/ws`;
+    let ws: WebSocket | null = null;
+    let closed = false;
+    let retry: number | undefined;
+
+    const connect = () => {
+      if (closed) return;
+      ws = new WebSocket(wsUrl);
+      ws.onmessage = (ev) => {
+        try {
+          const msg = JSON.parse(String(ev.data)) as {
+            type: string;
+            kind?: string;
+            state?: ServerState;
+          };
+          if (msg.type === "hello" && msg.state) setState(msg.state);
+          if (msg.type === "event" && msg.state) setState(msg.state);
+          if (msg.type === "nudge_due" && "Notification" in window && Notification.permission === "granted") {
+            const copy =
+              msg.kind === "morning"
+                ? "Gentle morning check-in when you're ready."
+                : msg.kind === "evening"
+                  ? "Evening reflection — what went okay today?"
+                  : msg.kind === "eat"
+                    ? "Have you eaten something today?"
+                    : "Quick time check — how's it going?";
+            new Notification("Companion", { body: copy, tag: `companion-${msg.kind ?? "chime"}` });
+          }
+        } catch {
+          /* ignore */
+        }
+      };
+      ws.onclose = () => {
+        if (!closed) retry = window.setTimeout(connect, 4000);
+      };
+    };
+    connect();
+    return () => {
+      closed = true;
+      if (retry) clearTimeout(retry);
+      ws?.close();
+    };
+  }, [user]);
+
   useEffect(() => {
     const id = window.setInterval(() => {
       setWebM0((w) => ({

@@ -9,6 +9,7 @@ import {
   nextUnixForLocalHour,
   zonedParts,
 } from "@companion/shared";
+import { sendWebPush, type NudgeKind } from "./push";
 
 export type Env = {
   COMPANION_STATE: DurableObjectNamespace;
@@ -161,21 +162,32 @@ export class CompanionStateDO extends DurableObject<Env> {
   async alarm() {
     const state = await this.getState();
     const now = Date.now();
+    const planned = (await this.ctx.storage.get<{ kind: NudgeKind; at: number }>("nextAlarm")) ?? null;
+    await this.ctx.storage.delete("nextAlarm");
+
     if (state.settings.overwhelmUntil && state.settings.overwhelmUntil * 1000 > now) {
       await this.scheduleNextAlarm();
       return;
     }
-    // Soft engagement decay: after missed nudges, back off instead of piling shame.
     if (state.settings.engagement.backoffUntil && state.settings.engagement.backoffUntil * 1000 > now) {
       await this.scheduleNextAlarm();
       return;
     }
+
     const tz = state.settings.ianaTimeZone ?? "UTC";
     const hour = zonedParts(new Date(now), tz).hour;
     if (isQuietHours(hour, state.settings.quietHoursStart, state.settings.quietHoursEnd)) {
       await this.scheduleNextAlarm();
       return;
     }
+
+    const kind = planned?.kind ?? this.nudgeKindForHour(state, hour);
+    if (!kind) {
+      await this.scheduleNextAlarm();
+      return;
+    }
+
+    // Previous delivered nudge still unanswered → soft miss (not every timer tick).
     if (state.settings.engagement.lastNudgeAt) {
       state.settings.engagement.missedNudges += 1;
       if (state.settings.engagement.missedNudges >= 3) {
@@ -188,19 +200,54 @@ export class CompanionStateDO extends DurableObject<Env> {
         return;
       }
     }
-    state.settings.engagement.lastNudgeAt = Math.floor(now / 1000);
-    await this.ctx.storage.put("state", state);
-    // Soft signal for clients / push pipeline — clients show in-app if connected.
-    this.broadcast({
-      type: "nudge_due",
-      hour,
-      checkinHour: state.settings.checkinHour,
-      reflectionHour: state.settings.reflectionHour,
-      chimeFrequencyMin: state.settings.chimeFrequencyMin,
-      eatReminderEnabled: state.settings.eatReminderEnabled,
-      eatReminderHour: state.settings.eatReminderHour,
-    });
+
+    const delivered = await this.deliverNudge(kind, hour);
+    if (delivered) {
+      state.settings.engagement.lastNudgeAt = Math.floor(now / 1000);
+      await this.ctx.storage.put("state", state);
+    }
     await this.scheduleNextAlarm();
+  }
+
+  private nudgeKindForHour(state: StoredState, hour: number): NudgeKind | null {
+    if (hour === state.settings.checkinHour) return "morning";
+    if (hour === state.settings.reflectionHour) return "evening";
+    if (state.settings.eatReminderEnabled && hour === state.settings.eatReminderHour) return "eat";
+    if (state.settings.chimeFrequencyMin && state.settings.chimeFrequencyMin > 0) return "chime";
+    return null;
+  }
+
+  private async deliverNudge(kind: NudgeKind, hour: number): Promise<boolean> {
+    const msg = {
+      type: "nudge_due" as const,
+      kind,
+      hour,
+    };
+    const hadWs = this.sessions.size > 0;
+    this.broadcast(msg);
+
+    let pushed = false;
+    const userId = this.ctx.id.name;
+    if (
+      userId &&
+      this.env.VAPID_PUBLIC_KEY &&
+      this.env.VAPID_PRIVATE_KEY &&
+      this.env.VAPID_SUBJECT
+    ) {
+      const sub = await this.env.KV.get(`push:${userId}`);
+      if (sub) {
+        pushed = await sendWebPush({
+          subscriptionJson: sub,
+          vapid: {
+            subject: this.env.VAPID_SUBJECT,
+            publicKey: this.env.VAPID_PUBLIC_KEY,
+            privateKey: this.env.VAPID_PRIVATE_KEY,
+          },
+          kind,
+        });
+      }
+    }
+    return hadWs || pushed;
   }
 
   private async getState(): Promise<StoredState> {
@@ -230,6 +277,7 @@ export class CompanionStateDO extends DurableObject<Env> {
       } else if (state.dayKey !== today) {
         state.dayKey = today;
         state.dayLog = [];
+        state.lastBrief = null;
         await this.ctx.storage.put("state", state);
       }
     }
@@ -321,20 +369,41 @@ export class CompanionStateDO extends DurableObject<Env> {
     const state = await this.getState();
     const now = Date.now();
     const tz = state.settings.ianaTimeZone ?? "UTC";
-    const candidates: number[] = [];
-    const addHour = (h: number) => {
-      candidates.push(nextUnixForLocalHour(h, tz, now));
+    const candidates: Array<{ at: number; kind: NudgeKind }> = [];
+    const addHour = (h: number, kind: NudgeKind) => {
+      candidates.push({ at: nextUnixForLocalHour(h, tz, now), kind });
     };
-    addHour(state.settings.checkinHour);
-    addHour(state.settings.reflectionHour);
-    if (state.settings.eatReminderEnabled) addHour(state.settings.eatReminderHour);
+    addHour(state.settings.checkinHour, "morning");
+    addHour(state.settings.reflectionHour, "evening");
+    if (state.settings.eatReminderEnabled) addHour(state.settings.eatReminderHour, "eat");
     if (state.settings.chimeFrequencyMin && state.settings.chimeFrequencyMin > 0) {
-      candidates.push(now + state.settings.chimeFrequencyMin * 60_000);
-    } else {
-      // Default poll every 30m so noon-ish nudges still fire for clients
-      candidates.push(now + 30 * 60_000);
+      candidates.push({ at: now + state.settings.chimeFrequencyMin * 60_000, kind: "chime" });
     }
-    const next = Math.min(...candidates);
-    await this.ctx.storage.setAlarm(next);
+
+    // If quiet hours cover a candidate, skip past quiet end for that slot.
+    const filtered = candidates
+      .map((c) => {
+        const hour = zonedParts(new Date(c.at), tz).hour;
+        if (!isQuietHours(hour, state.settings.quietHoursStart, state.settings.quietHoursEnd)) {
+          return c;
+        }
+        const end = state.settings.quietHoursEnd;
+        if (end == null) return null;
+        return { at: nextUnixForLocalHour(end, tz, c.at), kind: c.kind };
+      })
+      .filter((c): c is { at: number; kind: NudgeKind } => !!c && c.at > now);
+
+    if (!filtered.length) {
+      // No scheduled nudges — wake at next day boundary to re-evaluate.
+      const boundaryMs = nextDayBoundaryUnix(now, tz) * 1000;
+      await this.ctx.storage.put("nextAlarm", { kind: "morning" as NudgeKind, at: boundaryMs });
+      await this.ctx.storage.setAlarm(boundaryMs);
+      return;
+    }
+
+    filtered.sort((a, b) => a.at - b.at);
+    const next = filtered[0]!;
+    await this.ctx.storage.put("nextAlarm", next);
+    await this.ctx.storage.setAlarm(next.at);
   }
 }
