@@ -116,8 +116,12 @@ export async function resolveUser(c: Context<{ Bindings: Env }>): Promise<Compan
   const sealed = match?.[1] ? decodeURIComponent(match[1]) : undefined;
   if (!sealed) return null;
 
-  if (sealed.startsWith("dev:") && c.env.DEV_AUTH_BYPASS === "true") {
-    return { id: sealed.slice(4) || "local-user", email: "dev@localhost", mode: "dev" };
+  if (
+    sealed === "dev:local-user" &&
+    c.env.DEV_AUTH_BYPASS === "true" &&
+    !c.env.WORKOS_API_KEY
+  ) {
+    return { id: "local-user", email: "dev@localhost", mode: "dev" };
   }
 
   if (!c.env.WORKOS_API_KEY || !c.env.WORKOS_COOKIE_PASSWORD || !c.env.WORKOS_CLIENT_ID) {
