@@ -15,6 +15,8 @@ export type EngagementState = {
   missedNudges: number;
   /** Unix seconds; skip push/nudge until this time when decaying */
   backoffUntil: number | null;
+  /** Unix seconds when the last nudge was sent; next alarm counts a miss if still set */
+  lastNudgeAt: number | null;
 };
 
 export type UserSettings = {
@@ -29,6 +31,8 @@ export type UserSettings = {
   openRouterKeySet: boolean;
   overwhelmUntil: number | null;
   healthDataConsent: boolean;
+  /** IANA timezone for local nudge hours and logical day (e.g. America/Los_Angeles) */
+  ianaTimeZone: string | null;
   engagement: EngagementState;
 };
 
@@ -46,6 +50,7 @@ export const DEFAULT_ENGAGEMENT: EngagementState = {
   checkinsThisWeek: 0,
   missedNudges: 0,
   backoffUntil: null,
+  lastNudgeAt: null,
 };
 
 export const DEFAULT_SETTINGS: UserSettings = {
@@ -60,6 +65,7 @@ export const DEFAULT_SETTINGS: UserSettings = {
   openRouterKeySet: false,
   overwhelmUntil: null,
   healthDataConsent: false,
+  ianaTimeZone: null,
   engagement: { ...DEFAULT_ENGAGEMENT },
 };
 

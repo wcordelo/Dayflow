@@ -41,6 +41,14 @@ export function App() {
       const s = await api<ServerState>("/api/state");
       setState(s);
       if (!s.settings.healthDataConsent) setConsentOpen(true);
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      if (!s.settings.ianaTimeZone && tz) {
+        const updated = await api<{ state: ServerState }>("/api/settings", {
+          method: "POST",
+          body: JSON.stringify({ ianaTimeZone: tz }),
+        });
+        setState(updated.state);
+      }
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load");
@@ -109,6 +117,11 @@ export function App() {
     speak(reply, tts);
     const priorities = (res.result.priorities as Array<{ text: string; action: string }> | undefined) ?? [];
     if (priorities.length) {
+      const drops = new Set(
+        priorities
+          .filter((p) => p.action === "drop" && p.text?.trim())
+          .map((p) => p.text.trim().toLowerCase()),
+      );
       const mapped = priorities
         .filter((p) => p.action !== "drop" && p.text?.trim())
         .map((p) => ({
@@ -117,9 +130,33 @@ export function App() {
           status: "active" as const,
           source: "checkin",
         }));
-      if (mapped.length) await mutate("priority_set", { priorities: mapped });
+      let next = (state?.priorities ?? []).filter(
+        (p) => !drops.has(p.text.trim().toLowerCase()),
+      );
+      for (const p of mapped) {
+        const key = p.text.trim().toLowerCase();
+        const idx = next.findIndex((e) => e.text.trim().toLowerCase() === key);
+        if (idx >= 0) {
+          next[idx] = { ...next[idx], text: p.text, status: "active" };
+        } else {
+          next.push(p);
+        }
+      }
+      if (mapped.length || drops.size) await mutate("priority_set", { priorities: next });
     }
     await mutate("checkin_completed", { reply, source: res.source });
+  }
+
+  async function sendMidday() {
+    const text = draft.trim();
+    if (!text) return;
+    setChat((c) => [...c, { role: "me", text }]);
+    setDraft("");
+    await mutate("chime_answered", { response: text });
+    const res = await runAi("midday", text);
+    const reply = String(res.result.reply ?? "Thanks for checking in.");
+    setChat((c) => [...c, { role: "them", text: reply }]);
+    speak(reply, tts);
   }
 
   async function startMorning() {
@@ -422,7 +459,12 @@ export function App() {
             <button className={`mic ${listening ? "live" : ""}`} type="button" onClick={toggleMic}>
               {listening ? "…" : "🎤"}
             </button>
-            <button className="btn" type="button" onClick={() => void sendMorning()} disabled={!draft.trim()}>
+            <button
+              className="btn"
+              type="button"
+              onClick={() => void (tab === "midday" ? sendMidday() : sendMorning())}
+              disabled={!draft.trim()}
+            >
               Send
             </button>
             <button className="btn ghost" type="button" onClick={() => void friendReframe()}>

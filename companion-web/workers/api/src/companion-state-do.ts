@@ -6,6 +6,8 @@ import {
   isoWeekKey,
   logicalDayKey,
   nextDayBoundaryUnix,
+  nextUnixForLocalHour,
+  zonedParts,
 } from "@companion/shared";
 
 export type Env = {
@@ -105,6 +107,25 @@ export class CompanionStateDO extends DurableObject<Env> {
       await this.scheduleNextAlarm();
       return Response.json({ event, state });
     }
+    if (url.pathname === "/wipe" && request.method === "POST") {
+      this.ctx.storage.sql.exec(`DELETE FROM events`);
+      const tz = (await this.getState()).settings.ianaTimeZone;
+      await this.ctx.storage.put("state", {
+        priorities: [],
+        settings: {
+          ...DEFAULT_SETTINGS,
+          healthDataConsent: false,
+          openRouterKeySet: false,
+          overwhelmUntil: null,
+          ianaTimeZone: tz,
+        },
+        dayKey: logicalDayKey(new Date(), tz),
+        dayLog: [],
+        lastBrief: null,
+      } satisfies StoredState);
+      await this.scheduleNextAlarm();
+      return Response.json({ ok: true });
+    }
     return new Response("Not found", { status: 404 });
   }
 
@@ -139,16 +160,21 @@ export class CompanionStateDO extends DurableObject<Env> {
       await this.scheduleNextAlarm();
       return;
     }
-    const hour = new Date().getHours();
-    state.settings.engagement.missedNudges += 1;
-    if (state.settings.engagement.missedNudges >= 3) {
-      state.settings.engagement.backoffUntil = Math.floor(now / 1000) + 24 * 3600;
-      state.settings.engagement.missedNudges = 0;
-      await this.ctx.storage.put("state", state);
-      this.broadcast({ type: "engagement_backoff", until: state.settings.engagement.backoffUntil });
-      await this.scheduleNextAlarm();
-      return;
+    const tz = state.settings.ianaTimeZone ?? "UTC";
+    const hour = zonedParts(new Date(now), tz).hour;
+    if (state.settings.engagement.lastNudgeAt) {
+      state.settings.engagement.missedNudges += 1;
+      if (state.settings.engagement.missedNudges >= 3) {
+        state.settings.engagement.backoffUntil = Math.floor(now / 1000) + 24 * 3600;
+        state.settings.engagement.missedNudges = 0;
+        state.settings.engagement.lastNudgeAt = null;
+        await this.ctx.storage.put("state", state);
+        this.broadcast({ type: "engagement_backoff", until: state.settings.engagement.backoffUntil });
+        await this.scheduleNextAlarm();
+        return;
+      }
     }
+    state.settings.engagement.lastNudgeAt = Math.floor(now / 1000);
     await this.ctx.storage.put("state", state);
     // Soft signal for clients / push pipeline — clients show in-app if connected.
     this.broadcast({
@@ -168,6 +194,9 @@ export class CompanionStateDO extends DurableObject<Env> {
     if (!state.settings.engagement) {
       state.settings.engagement = { ...DEFAULT_ENGAGEMENT };
     }
+    if (state.settings.engagement.lastNudgeAt === undefined) {
+      state.settings.engagement.lastNudgeAt = null;
+    }
     const week = isoWeekKey();
     if (state.settings.engagement.weekKey !== week) {
       state.settings.engagement = {
@@ -175,9 +204,10 @@ export class CompanionStateDO extends DurableObject<Env> {
         checkinsThisWeek: 0,
         missedNudges: state.settings.engagement.missedNudges,
         backoffUntil: state.settings.engagement.backoffUntil,
+        lastNudgeAt: state.settings.engagement.lastNudgeAt,
       };
     }
-    const today = logicalDayKey();
+    const today = logicalDayKey(new Date(), state.settings.ianaTimeZone);
     if (state.dayKey !== today) {
       state.dayKey = today;
       state.dayLog = [];
@@ -221,7 +251,7 @@ export class CompanionStateDO extends DurableObject<Env> {
       state.priorities = priorities;
     }
     if (kind === "overwhelm_on") {
-      state.settings.overwhelmUntil = nextDayBoundaryUnix();
+      state.settings.overwhelmUntil = nextDayBoundaryUnix(Date.now(), state.settings.ianaTimeZone);
     }
     if (kind === "overwhelm_off") {
       state.settings.overwhelmUntil = null;
@@ -245,6 +275,7 @@ export class CompanionStateDO extends DurableObject<Env> {
     ) {
       state.settings.engagement.missedNudges = 0;
       state.settings.engagement.backoffUntil = null;
+      state.settings.engagement.lastNudgeAt = null;
       if (kind === "checkin_completed" || kind === "chime_answered" || kind === "brief_generated") {
         state.settings.engagement.checkinsThisWeek += 1;
       }
@@ -270,12 +301,10 @@ export class CompanionStateDO extends DurableObject<Env> {
   private async scheduleNextAlarm() {
     const state = await this.getState();
     const now = Date.now();
+    const tz = state.settings.ianaTimeZone ?? "UTC";
     const candidates: number[] = [];
     const addHour = (h: number) => {
-      const d = new Date();
-      d.setHours(h, 0, 0, 0);
-      if (d.getTime() <= now) d.setDate(d.getDate() + 1);
-      candidates.push(d.getTime());
+      candidates.push(nextUnixForLocalHour(h, tz, now));
     };
     addHour(state.settings.checkinHour);
     addHour(state.settings.reflectionHour);

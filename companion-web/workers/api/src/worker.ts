@@ -56,20 +56,8 @@ app.delete("/api/me/data", async (c) => {
   if (!user) return c.json({ error: "unauthorized" }, 401);
   await c.env.KV.delete(`push:${user.id}`);
   await c.env.KV.delete(`orkey:${user.id}`);
-  // Reset DO by overwhelming wipe via settings + empty priorities
   const stub = doStub(c.env, user.id);
-  await stub.fetch("https://do/mutate", {
-    method: "POST",
-    body: JSON.stringify({ kind: "priority_set", payload: { priorities: [] } }),
-  });
-  await stub.fetch("https://do/settings", {
-    method: "POST",
-    body: JSON.stringify({
-      healthDataConsent: false,
-      openRouterKeySet: false,
-      overwhelmUntil: null,
-    }),
-  });
+  await stub.fetch("https://do/wipe", { method: "POST" });
   return c.json({ ok: true, deleted: true });
 });
 
@@ -104,6 +92,9 @@ app.get("/api/events", async (c) => {
 app.post("/api/mutate", async (c) => {
   const user = await resolveUser(c);
   if (!user) return c.json({ error: "unauthorized" }, 401);
+  if (!(await userHasHealthConsent(c.env, user.id))) {
+    return c.json({ error: "health_consent_required" }, 403);
+  }
   const stub = doStub(c.env, user.id);
   return stub.fetch("https://do/mutate", { method: "POST", body: await c.req.text() });
 });
@@ -133,6 +124,9 @@ app.post("/api/keys/openrouter", async (c) => {
 app.post("/api/ai/:engine", async (c) => {
   const user = await resolveUser(c);
   if (!user) return c.json({ error: "unauthorized" }, 401);
+  if (!(await userHasHealthConsent(c.env, user.id))) {
+    return c.json({ error: "health_consent_required" }, 403);
+  }
   const engine = c.req.param("engine") as "checkin" | "brief" | "midday";
   if (!["checkin", "brief", "midday"].includes(engine)) {
     return c.json({ error: "unknown engine" }, 400);
@@ -188,6 +182,14 @@ app.get("/api/ws", async (c) => {
 function doStub(env: Env, userId: string) {
   const id = env.COMPANION_STATE.idFromName(userId);
   return env.COMPANION_STATE.get(id);
+}
+
+async function userHasHealthConsent(env: Env, userId: string): Promise<boolean> {
+  const stub = doStub(env, userId);
+  const res = await stub.fetch("https://do/state");
+  if (!res.ok) return false;
+  const state = (await res.json()) as { settings?: { healthDataConsent?: boolean } };
+  return state.settings?.healthDataConsent === true;
 }
 
 async function encryptKey(plain: string, secret: string): Promise<string> {

@@ -28,6 +28,7 @@ export type ServerState = {
     openRouterKeySet: boolean;
     overwhelmUntil: number | null;
     healthDataConsent: boolean;
+    ianaTimeZone?: string | null;
     engagement?: {
       weekKey: string;
       checkinsThisWeek: number;

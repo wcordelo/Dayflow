@@ -91,8 +91,7 @@ export function createAuthRoutes() {
 
   app.get("/me", async (c) => {
     const user = await resolveUser(c);
-    if (!user) return c.json({ user: null }, 401);
-    return c.json({ user });
+    return c.json({ user: user ?? null });
   });
 
   return app;
