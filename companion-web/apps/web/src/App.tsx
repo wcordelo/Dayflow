@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, type ServerState } from "./api";
 import { speak, speechSupported, startListening } from "./speech";
 
@@ -32,6 +32,7 @@ export function App() {
 
   const tts = state?.settings.ttsEnabled ?? true;
   const overwhelmed = !!(state?.settings.overwhelmUntil && state.settings.overwhelmUntil * 1000 > Date.now());
+  const listenRef = useRef<{ stop: () => void } | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -209,6 +210,8 @@ export function App() {
 
   function toggleMic() {
     if (listening) {
+      listenRef.current?.stop();
+      listenRef.current = null;
       setListening(false);
       return;
     }
@@ -217,14 +220,17 @@ export function App() {
       onPartial: (t) => setDraft(t),
       onFinal: (t) => {
         setDraft(t);
+        listenRef.current = null;
         setListening(false);
       },
       onError: (e) => {
         setError(e);
+        listenRef.current = null;
         setListening(false);
       },
     });
     if (!handle) setListening(false);
+    else listenRef.current = handle;
   }
 
   async function overwhelm() {

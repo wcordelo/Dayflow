@@ -102,8 +102,13 @@ app.post("/api/mutate", async (c) => {
 app.post("/api/settings", async (c) => {
   const user = await resolveUser(c);
   if (!user) return c.json({ error: "unauthorized" }, 401);
+  const body = (await c.req.json()) as Record<string, unknown>;
+  const { healthDataConsent: _consent, ...patch } = body;
   const stub = doStub(c.env, user.id);
-  return stub.fetch("https://do/settings", { method: "POST", body: await c.req.text() });
+  return stub.fetch("https://do/settings", {
+    method: "POST",
+    body: JSON.stringify(patch),
+  });
 });
 
 app.post("/api/keys/openrouter", async (c) => {
@@ -111,7 +116,9 @@ app.post("/api/keys/openrouter", async (c) => {
   if (!user) return c.json({ error: "unauthorized" }, 401);
   const { apiKey } = (await c.req.json()) as { apiKey: string };
   if (!apiKey?.trim()) return c.json({ error: "empty key" }, 400);
-  const enc = await encryptKey(apiKey.trim(), c.env.KEY_ENCRYPTION_SECRET ?? "dev");
+  const encSecret = c.env.KEY_ENCRYPTION_SECRET;
+  if (!encSecret) return c.json({ error: "key_encryption_not_configured" }, 503);
+  const enc = await encryptKey(apiKey.trim(), encSecret);
   await c.env.KV.put(`orkey:${user.id}`, enc);
   const stub = doStub(c.env, user.id);
   await stub.fetch("https://do/settings", {
@@ -133,9 +140,12 @@ app.post("/api/ai/:engine", async (c) => {
   }
   const body = (await c.req.json()) as { message?: string; context?: unknown };
   const stored = await c.env.KV.get(`orkey:${user.id}`);
-  const userKey = stored
-    ? await decryptKey(stored, c.env.KEY_ENCRYPTION_SECRET ?? "dev")
-    : c.env.OPENROUTER_FALLBACK_KEY;
+  let userKey = c.env.OPENROUTER_FALLBACK_KEY;
+  if (stored) {
+    const encSecret = c.env.KEY_ENCRYPTION_SECRET;
+    if (!encSecret) return c.json({ error: "key_encryption_not_configured" }, 503);
+    userKey = await decryptKey(stored, encSecret);
+  }
 
   if (!userKey) {
     return c.json({

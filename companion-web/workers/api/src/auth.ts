@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import type { Context } from "hono";
 import { getCookie, setCookie, deleteCookie } from "hono/cookie";
 import type { Env } from "./companion-state-do";
 
@@ -99,10 +100,17 @@ export function createAuthRoutes() {
 
 export type CompanionUser = { id: string; email?: string; mode: "workos" | "dev" };
 
-export async function resolveUser(c: {
-  env: Env;
-  req: { header: (n: string) => string | undefined };
-}): Promise<CompanionUser | null> {
+function sessionCookieOptions(c: Context<{ Bindings: Env }>) {
+  return {
+    path: "/",
+    httpOnly: true,
+    sameSite: "Lax" as const,
+    maxAge: SESSION_MAX_AGE,
+    secure: c.env.AUTH_REDIRECT_URI.startsWith("https"),
+  };
+}
+
+export async function resolveUser(c: Context<{ Bindings: Env }>): Promise<CompanionUser | null> {
   const cookie = c.req.header("cookie") ?? "";
   const match = cookie.match(new RegExp(`${SESSION_COOKIE}=([^;]+)`));
   const sealed = match?.[1] ? decodeURIComponent(match[1]) : undefined;
@@ -127,6 +135,9 @@ export async function resolveUser(c: {
   }
   const refreshed = await session.refresh();
   if (!refreshed.authenticated) return null;
+  if (refreshed.sealedSession) {
+    setCookie(c, SESSION_COOKIE, refreshed.sealedSession, sessionCookieOptions(c));
+  }
   return { id: refreshed.user.id, email: refreshed.user.email, mode: "workos" };
 }
 

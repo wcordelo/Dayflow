@@ -36,6 +36,13 @@ type StoredState = {
   lastBrief: unknown | null;
 };
 
+function isQuietHours(hour: number, start: number | null, end: number | null): boolean {
+  if (start == null || end == null) return false;
+  if (start === end) return false;
+  if (start < end) return hour >= start && hour < end;
+  return hour >= start || hour < end;
+}
+
 const DDL = [
   `CREATE TABLE IF NOT EXISTS events (
      id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -63,7 +70,7 @@ export class CompanionStateDO extends DurableObject<Env> {
         await this.ctx.storage.put("state", {
           priorities: [],
           settings: { ...DEFAULT_SETTINGS },
-          dayKey: logicalDayKey(),
+          dayKey: "pending",
           dayLog: [],
           lastBrief: null,
         } satisfies StoredState);
@@ -102,6 +109,9 @@ export class CompanionStateDO extends DurableObject<Env> {
       const patch = (await request.json()) as Partial<UserSettings>;
       const state = await this.getState();
       state.settings = { ...state.settings, ...patch };
+      if (patch.ianaTimeZone) {
+        state.dayKey = logicalDayKey(new Date(), state.settings.ianaTimeZone);
+      }
       await this.ctx.storage.put("state", state);
       const event = await this.append("settings_updated", patch);
       await this.scheduleNextAlarm();
@@ -162,6 +172,10 @@ export class CompanionStateDO extends DurableObject<Env> {
     }
     const tz = state.settings.ianaTimeZone ?? "UTC";
     const hour = zonedParts(new Date(now), tz).hour;
+    if (isQuietHours(hour, state.settings.quietHoursStart, state.settings.quietHoursEnd)) {
+      await this.scheduleNextAlarm();
+      return;
+    }
     if (state.settings.engagement.lastNudgeAt) {
       state.settings.engagement.missedNudges += 1;
       if (state.settings.engagement.missedNudges >= 3) {
@@ -207,12 +221,17 @@ export class CompanionStateDO extends DurableObject<Env> {
         lastNudgeAt: state.settings.engagement.lastNudgeAt,
       };
     }
-    const today = logicalDayKey(new Date(), state.settings.ianaTimeZone);
-    if (state.dayKey !== today) {
-      state.dayKey = today;
-      state.dayLog = [];
-      // Soft rollover: keep priorities text but mark as carried candidates
-      await this.ctx.storage.put("state", state);
+    const tz = state.settings.ianaTimeZone;
+    if (tz) {
+      const today = logicalDayKey(new Date(), tz);
+      if (state.dayKey === "pending") {
+        state.dayKey = today;
+        await this.ctx.storage.put("state", state);
+      } else if (state.dayKey !== today) {
+        state.dayKey = today;
+        state.dayLog = [];
+        await this.ctx.storage.put("state", state);
+      }
     }
     return state;
   }
