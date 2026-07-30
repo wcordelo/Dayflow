@@ -189,12 +189,33 @@ app.post("/api/ai/:engine", async (c) => {
 
   try {
     const logical = engine === "brief" ? "brief-fast" : "checkin-fast";
+    const ctx = (body.context ?? {}) as Record<string, unknown>;
+    const userPayload =
+      engine === "checkin"
+        ? {
+            now_local: ctx.now_local ?? new Date().toISOString(),
+            day_key: ctx.day_key ?? ctx.dayKey ?? null,
+            yesterday_priorities: ctx.yesterday_priorities ?? ctx.priorities ?? [],
+            mode: ctx.mode ?? "soft_confirm_on_open",
+            user_message: body.message ?? null,
+            gratitude_anchor: ctx.gratitude_anchor ?? null,
+          }
+        : engine === "brief"
+          ? {
+              now_local: ctx.now_local ?? new Date().toISOString(),
+              day_key: ctx.day_key ?? ctx.dayKey ?? null,
+              priorities: ctx.priorities ?? [],
+              timeline_cards: ctx.timeline_cards ?? [],
+              day_log: ctx.day_log ?? ctx.dayLog ?? [],
+              user_message: body.message ?? null,
+            }
+          : { message: body.message ?? null, context: ctx };
     const { text, model } = await completeJson({
       baseUrl: c.env.LITELLM_BASE_URL,
       apiKey: userKey,
       logicalModel: logical,
       system: promptForEngine(engine),
-      user: JSON.stringify({ message: body.message ?? null, context: body.context ?? {} }),
+      user: JSON.stringify(userPayload),
     });
     let parsed: unknown;
     try {

@@ -475,7 +475,28 @@ export class CompanionStateDO extends DurableObject<Env> {
 
     const event = { id, kind, dayKey: state.dayKey, payload, createdAt };
     this.broadcast({ type: "event", event, state });
+    void this.mirrorEventToD1(event);
     return event;
+  }
+
+  private async mirrorEventToD1(event: {
+    id: number;
+    kind: CompanionEventKind;
+    dayKey: string;
+    payload: unknown;
+    createdAt: number;
+  }) {
+    const userId = this.ctx.id.name;
+    if (!userId || !this.env.DB) return;
+    try {
+      await this.env.DB.prepare(
+        `INSERT INTO event_log (user_id, kind, day_key, payload, created_at) VALUES (?, ?, ?, ?, ?)`,
+      )
+        .bind(userId, event.kind, event.dayKey, JSON.stringify(event.payload ?? {}), event.createdAt)
+        .run();
+    } catch {
+      /* D1 may be unset in local dry-run — DO SQLite remains source of truth */
+    }
   }
 
   private broadcast(msg: unknown) {

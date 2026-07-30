@@ -152,15 +152,30 @@ export function App() {
   }
 
   async function runAi(engine: "checkin" | "brief" | "midday", message?: string) {
+    const s = stateRef.current;
+    const now = new Date();
+    const context = {
+      now_local: now.toISOString(),
+      day_key: s?.dayKey ?? null,
+      priorities: s?.priorities ?? [],
+      yesterday_priorities: (s?.priorities ?? []).map((p) => ({
+        id: p.id,
+        text: p.text,
+        status_hint: p.status,
+      })),
+      dayLog: s?.dayLog ?? [],
+      timeline_cards: (s?.dayLog ?? []).map((note, i) => ({
+        id: `log-${i}`,
+        text: note,
+        kind: "day_log",
+      })),
+      mode: engine === "checkin" ? "soft_confirm_on_open" : engine,
+    };
     const res = await api<{ result: Record<string, unknown>; source: string }>("/api/ai/" + engine, {
       method: "POST",
       body: JSON.stringify({
         message,
-        context: {
-          priorities: state?.priorities ?? [],
-          dayKey: state?.dayKey,
-          dayLog: state?.dayLog ?? [],
-        },
+        context,
       }),
     });
     return res;
@@ -255,7 +270,19 @@ export function App() {
 
   async function runEvening() {
     setTab("evening");
-    const res = await runAi("brief", state?.dayLog.join("; ") ?? "");
+    const s = stateRef.current;
+    const payload = JSON.stringify({
+      now_local: new Date().toISOString(),
+      day_key: s?.dayKey ?? null,
+      priorities: s?.priorities ?? [],
+      day_log: s?.dayLog ?? [],
+      timeline_cards: (s?.dayLog ?? []).map((note, i) => ({
+        id: `log-${i}`,
+        text: note,
+        kind: "day_log",
+      })),
+    });
+    const res = await runAi("brief", payload);
     const result = res.result as typeof brief;
     setBrief(result);
     await mutate("brief_generated", result);
