@@ -625,7 +625,8 @@ export function App() {
           )}
           <p className="muted" style={{ marginTop: "0.75rem" }}>
             This week ({state.settings.engagement?.weekKey ?? "…"}):{" "}
-            {state.settings.engagement?.checkinsThisWeek ?? 0} check-ins (goal ≥4). Soft backoff if nudges go
+            {state.settings.engagement?.checkinsThisWeek ?? 0} days with a check-in (goal ≥4). Soft backoff if
+            nudges go
             unanswered — never shame, just quieter for a day.
           </p>
           <label className="muted">OpenRouter API key (BYOK)</label>
