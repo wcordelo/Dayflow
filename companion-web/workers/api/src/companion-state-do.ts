@@ -343,7 +343,6 @@ export class CompanionStateDO extends DurableObject<Env> {
     this.broadcast(msg);
 
     let pushed = false;
-    let hadPushSubs = false;
     const userId = this.ctx.id.name;
     if (
       userId &&
@@ -355,7 +354,6 @@ export class CompanionStateDO extends DurableObject<Env> {
       if (raw) {
         const parsed = JSON.parse(raw) as unknown;
         const subs = Array.isArray(parsed) ? parsed : [parsed];
-        hadPushSubs = subs.length > 0;
         for (const sub of subs) {
           const ok = await sendWebPush({
             subscriptionJson: JSON.stringify(sub),
@@ -370,8 +368,7 @@ export class CompanionStateDO extends DurableObject<Env> {
         }
       }
     }
-    // Idle/background sockets alone are not delivery — require push when subscribed.
-    return hadPushSubs ? pushed : hadWs;
+    return pushed || hadWs;
   }
 
   private async getState(): Promise<StoredState> {

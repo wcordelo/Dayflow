@@ -6,6 +6,12 @@ type Tab = "home" | "morning" | "midday" | "evening" | "settings";
 
 type ChatTurn = { role: "me" | "them"; text: string };
 
+function parseHourInput(raw: string): number | null {
+  const hour = Number(raw);
+  if (!Number.isFinite(hour) || hour < 0 || hour > 23) return null;
+  return Math.floor(hour);
+}
+
 export function App() {
   const [tab, setTab] = useState<Tab>("home");
   const [user, setUser] = useState<{ id: string; email?: string } | null>(null);
@@ -676,7 +682,10 @@ export function App() {
             max={23}
             key={`checkin-${state.settings.checkinHour}`}
             defaultValue={state.settings.checkinHour}
-            onBlur={(e) => void saveSettings({ checkinHour: Number(e.target.value) })}
+            onBlur={(e) => {
+              const hour = parseHourInput(e.target.value);
+              if (hour !== null) void saveSettings({ checkinHour: hour });
+            }}
           />
           <label className="muted">Reflection hour</label>
           <input
@@ -685,7 +694,10 @@ export function App() {
             max={23}
             key={`reflection-${state.settings.reflectionHour}`}
             defaultValue={state.settings.reflectionHour}
-            onBlur={(e) => void saveSettings({ reflectionHour: Number(e.target.value) })}
+            onBlur={(e) => {
+              const hour = parseHourInput(e.target.value);
+              if (hour !== null) void saveSettings({ reflectionHour: hour });
+            }}
           />
           <label className="muted">Chime every N minutes (blank = off)</label>
           <input
@@ -727,7 +739,10 @@ export function App() {
                 max={23}
                 key={`eat-${state.settings.eatReminderHour}`}
                 defaultValue={state.settings.eatReminderHour}
-                onBlur={(e) => void saveSettings({ eatReminderHour: Number(e.target.value) })}
+                onBlur={(e) => {
+                  const hour = parseHourInput(e.target.value);
+                  if (hour !== null) void saveSettings({ eatReminderHour: hour });
+                }}
               />
             </>
           )}
