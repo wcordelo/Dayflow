@@ -291,7 +291,6 @@ export class CompanionStateDO extends DurableObject<Env> {
     let pushed = false;
     const userId = this.ctx.id.name;
     if (
-      !hadWs &&
       userId &&
       this.env.VAPID_PUBLIC_KEY &&
       this.env.VAPID_PRIVATE_KEY &&

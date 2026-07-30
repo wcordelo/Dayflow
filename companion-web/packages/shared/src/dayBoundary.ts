@@ -26,9 +26,13 @@ export function zonedParts(date: Date, timeZone: string): ZonedParts {
 
 export function logicalDayKey(date = new Date(), timeZone?: string | null): string {
   if (timeZone) {
-    const { year, month, day, hour } = zonedParts(date, timeZone);
+    let { year, month, day, hour } = zonedParts(date, timeZone);
     if (hour < DAY_BOUNDARY_HOUR) {
-      return logicalDayKey(new Date(date.getTime() - 86400000), timeZone);
+      const prev = new Date(Date.UTC(year, month - 1, day));
+      prev.setUTCDate(prev.getUTCDate() - 1);
+      year = prev.getUTCFullYear();
+      month = prev.getUTCMonth() + 1;
+      day = prev.getUTCDate();
     }
     return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
   }

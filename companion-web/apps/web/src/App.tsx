@@ -631,16 +631,18 @@ export function App() {
             type="number"
             min={0}
             max={23}
-            value={state.settings.checkinHour}
-            onChange={(e) => void saveSettings({ checkinHour: Number(e.target.value) })}
+            key={`checkin-${state.settings.checkinHour}`}
+            defaultValue={state.settings.checkinHour}
+            onBlur={(e) => void saveSettings({ checkinHour: Number(e.target.value) })}
           />
           <label className="muted">Reflection hour</label>
           <input
             type="number"
             min={0}
             max={23}
-            value={state.settings.reflectionHour}
-            onChange={(e) => void saveSettings({ reflectionHour: Number(e.target.value) })}
+            key={`reflection-${state.settings.reflectionHour}`}
+            defaultValue={state.settings.reflectionHour}
+            onBlur={(e) => void saveSettings({ reflectionHour: Number(e.target.value) })}
           />
           <label className="muted">Chime every N minutes (blank = off)</label>
           <input
@@ -679,8 +681,9 @@ export function App() {
                 type="number"
                 min={0}
                 max={23}
-                value={state.settings.eatReminderHour}
-                onChange={(e) => void saveSettings({ eatReminderHour: Number(e.target.value) })}
+                key={`eat-${state.settings.eatReminderHour}`}
+                defaultValue={state.settings.eatReminderHour}
+                onBlur={(e) => void saveSettings({ eatReminderHour: Number(e.target.value) })}
               />
             </>
           )}
