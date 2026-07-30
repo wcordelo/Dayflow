@@ -537,7 +537,13 @@ export class CompanionStateDO extends DurableObject<Env> {
         }
         const end = state.settings.quietHoursEnd;
         if (end == null) return null;
-        return { at: nextUnixForLocalHour(end, tz, c.at), kind: c.kind };
+        const shiftedAt = nextUnixForLocalHour(end, tz, c.at);
+        const shiftedHour = zonedParts(new Date(shiftedAt), tz).hour;
+        const kind =
+          c.kind === "chime"
+            ? c.kind
+            : this.nudgeKindForHour(state, shiftedHour) ?? c.kind;
+        return { at: shiftedAt, kind };
       })
       .filter((c): c is { at: number; kind: NudgeKind } => !!c && c.at > now);
 

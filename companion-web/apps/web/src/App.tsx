@@ -228,7 +228,9 @@ export function App() {
       }
       if (mapped.length || drops.size) await mutate("priority_set", { priorities: next });
     }
-    await mutate("checkin_completed", { reply, source: res.source });
+    if (res.result.needs_user_input !== true) {
+      await mutate("checkin_completed", { reply, source: res.source });
+    }
   }
 
   async function sendMidday() {
