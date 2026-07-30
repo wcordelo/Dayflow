@@ -325,6 +325,7 @@ export function App() {
       Array.isArray(result.accomplishments);
     if (!validBrief) {
       setBrief(null);
+      setError("Couldn't generate a reflection — try again in a moment.");
       return;
     }
     const briefResult = result as NonNullable<typeof brief>;

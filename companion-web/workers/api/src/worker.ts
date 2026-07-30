@@ -202,10 +202,20 @@ app.post("/api/ai/:engine", async (c) => {
     userKey = await decryptKey(stored, encSecret);
   }
 
+  const fallbackCtx = serverState
+    ? {
+        day_key: serverState.dayKey,
+        priorities: serverState.priorities,
+        day_log: serverState.dayLog,
+        yesterday_priorities: serverState.yesterdayPriorities,
+        ...((body.context && typeof body.context === "object" ? body.context : {}) as object),
+      }
+    : body.context;
+
   if (!userKey) {
     return c.json({
       source: "local_template",
-      result: JSON.parse(localFallback(engine, body.message, body.context)),
+      result: JSON.parse(localFallback(engine, body.message, fallbackCtx)),
     });
   }
 
@@ -257,7 +267,7 @@ app.post("/api/ai/:engine", async (c) => {
     } catch {
       parsed =
         engine === "brief"
-          ? JSON.parse(localFallback(engine, body.message, body.context))
+          ? JSON.parse(localFallback(engine, body.message, fallbackCtx))
           : { reply: text, raw: true };
     }
     if (
@@ -267,14 +277,14 @@ app.post("/api/ai/:engine", async (c) => {
         typeof (parsed as Record<string, unknown>).headline !== "string" ||
         !Array.isArray((parsed as Record<string, unknown>).accomplishments))
     ) {
-      parsed = JSON.parse(localFallback(engine, body.message, body.context));
+      parsed = JSON.parse(localFallback(engine, body.message, fallbackCtx));
     }
     return c.json({ source: "openrouter", model, result: parsed });
   } catch (e) {
     return c.json({
       source: "local_template",
       error: e instanceof Error ? e.message : "ai_failed",
-      result: JSON.parse(localFallback(engine, body.message, body.context)),
+      result: JSON.parse(localFallback(engine, body.message, fallbackCtx)),
     });
   }
 });
