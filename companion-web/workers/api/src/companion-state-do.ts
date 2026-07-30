@@ -213,6 +213,7 @@ export class CompanionStateDO extends DurableObject<Env> {
       })()
     ).filter((k) => !this.isNudgeCompletedForDay(k, state));
     if (!kinds.length) {
+      // Completed or nothing due — don't treat as a miss for a prior unanswered nudge.
       await this.scheduleNextAlarm();
       return;
     }
@@ -232,22 +233,19 @@ export class CompanionStateDO extends DurableObject<Env> {
         await this.scheduleNextAlarm();
         return;
       }
+      // Persist miss even if the upcoming delivery fails (offline / push error).
       await this.ctx.storage.put("state", state);
     }
 
-    let anyDelivered = false;
     let meaningfulDelivered = false;
     for (const kind of kinds) {
       if (await this.deliverNudge(kind, hour)) {
-        anyDelivered = true;
         if (kind !== "chime") meaningfulDelivered = true;
       }
     }
     if (meaningfulDelivered) {
       state.settings.engagement.lastNudgeAt = Math.floor(now / 1000);
       await this.ctx.storage.put("state", state);
-    } else if (anyDelivered) {
-      // chime-only: delivered but does not participate in miss/backoff tracking
     }
     await this.scheduleNextAlarm();
   }
@@ -386,7 +384,22 @@ export class CompanionStateDO extends DurableObject<Env> {
     if (kind === "priority_set") {
       const priorities = (payload as { priorities: unknown }).priorities;
       if (Array.isArray(priorities)) {
-        state.priorities = priorities as Priority[];
+        state.priorities = priorities
+          .filter(
+            (p): p is Priority =>
+              !!p &&
+              typeof p === "object" &&
+              typeof (p as Priority).id === "string" &&
+              typeof (p as Priority).text === "string" &&
+              typeof (p as Priority).status === "string",
+          )
+          .map((p) => ({
+            id: p.id,
+            text: p.text.trim(),
+            status: p.status,
+            ...(typeof p.source === "string" ? { source: p.source } : {}),
+          }))
+          .filter((p) => p.text.length > 0);
       }
     }
     if (kind === "overwhelm_on") {

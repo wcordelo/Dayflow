@@ -171,7 +171,14 @@ export function App() {
     const rawPriorities = res.result.priorities as
       | Array<{ text: string; action: string }>
       | undefined;
-    if (rawPriorities !== undefined && rawPriorities.length > 0) {
+    const wantsClear =
+      res.result.clear_priorities === true ||
+      (Array.isArray(rawPriorities) &&
+        rawPriorities.length === 0 &&
+        /\b(start fresh|clear (my )?(list|priorities|intentions)|reset (my )?list)\b/i.test(text));
+    if (wantsClear) {
+      await mutate("priority_set", { priorities: [] });
+    } else if (rawPriorities !== undefined && rawPriorities.length > 0) {
       const drops = new Set(
         rawPriorities
           .filter((p) => p.action === "drop" && p.text?.trim())
