@@ -54,6 +54,10 @@ app.post("/api/consent", async (c) => {
   if (!user) return c.json({ error: "unauthorized" }, 401);
   const { healthDataConsent } = (await c.req.json()) as { healthDataConsent: boolean };
   const stub = doStub(c.env, user.id);
+  if (!healthDataConsent) {
+    await stub.fetch("https://do/wipe", { method: "POST" });
+    return c.json({ ok: true });
+  }
   await stub.fetch("https://do/settings", {
     method: "POST",
     body: JSON.stringify({ healthDataConsent }),
