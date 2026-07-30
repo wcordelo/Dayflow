@@ -91,6 +91,7 @@ export function App() {
           };
           if (msg.type === "hello" && msg.state) setState(msg.state);
           if (msg.type === "event" && msg.state) setState(msg.state);
+          if (msg.type === "engagement_backoff" && msg.state) setState(msg.state);
           if (msg.type === "nudge_due" && "Notification" in window && Notification.permission === "granted") {
             const copy =
               msg.kind === "morning"

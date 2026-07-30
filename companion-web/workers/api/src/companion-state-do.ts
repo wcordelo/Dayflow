@@ -229,7 +229,11 @@ export class CompanionStateDO extends DurableObject<Env> {
         state.settings.engagement.missedNudges = 0;
         state.settings.engagement.lastNudgeAt = null;
         await this.ctx.storage.put("state", state);
-        this.broadcast({ type: "engagement_backoff", until: state.settings.engagement.backoffUntil });
+        this.broadcast({
+          type: "engagement_backoff",
+          until: state.settings.engagement.backoffUntil,
+          state,
+        });
         await this.scheduleNextAlarm();
         return;
       }
@@ -423,6 +427,27 @@ export class CompanionStateDO extends DurableObject<Env> {
     }
     if (kind === "brief_generated") {
       state.lastBrief = payload;
+      const outcomes = (payload as { priority_outcomes?: unknown }).priority_outcomes;
+      if (Array.isArray(outcomes)) {
+        const statusByOutcome: Record<string, Priority["status"]> = {
+          done: "done",
+          progressed: "progressed",
+          "still open": "open",
+        };
+        for (const raw of outcomes) {
+          if (!raw || typeof raw !== "object") continue;
+          const o = raw as { id?: string; text?: string; outcome?: string };
+          const status = statusByOutcome[String(o.outcome ?? "").toLowerCase()];
+          if (!status) continue;
+          state.priorities = state.priorities.map((p) => {
+            if (o.id && p.id === o.id) return { ...p, status };
+            if (o.text && p.text.trim().toLowerCase() === o.text.trim().toLowerCase()) {
+              return { ...p, status };
+            }
+            return p;
+          });
+        }
+      }
     }
     if (kind === "priority_update") {
       const { id: pid, status } = payload as { id: string; status: Priority["status"] };
