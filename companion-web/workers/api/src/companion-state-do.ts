@@ -148,7 +148,11 @@ export class CompanionStateDO extends DurableObject<Env> {
         payload: unknown;
       };
       const event = await this.append(body.kind, body.payload);
-      return Response.json({ event, state: await this.getState() });
+      const state = await this.getState();
+      return Response.json({
+        event,
+        state: state.settings.healthDataConsent ? state : redactStateWithoutConsent(state),
+      });
     }
     if (url.pathname === "/settings" && request.method === "POST") {
       const patch = pickAllowedSettings((await request.json()) as Partial<UserSettings>);
@@ -160,7 +164,10 @@ export class CompanionStateDO extends DurableObject<Env> {
       await this.ctx.storage.put("state", state);
       const event = await this.append("settings_updated", patch);
       await this.scheduleNextAlarm();
-      return Response.json({ event, state });
+      return Response.json({
+        event,
+        state: state.settings.healthDataConsent ? state : redactStateWithoutConsent(state),
+      });
     }
     if (url.pathname === "/wipe" && request.method === "POST") {
       this.ctx.storage.sql.exec(`DELETE FROM events`);
