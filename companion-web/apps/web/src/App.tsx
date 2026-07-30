@@ -239,7 +239,6 @@ export function App() {
             id: p.action === "keep" && p.id ? p.id : crypto.randomUUID(),
             text: trimmed,
             status: "active" as const,
-            source: "checkin",
           });
         }
       }
