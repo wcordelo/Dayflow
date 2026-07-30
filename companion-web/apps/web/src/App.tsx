@@ -93,7 +93,10 @@ export function App() {
           if (msg.type === "engagement_backoff" && msg.state) setState(msg.state);
           if (msg.type === "nudge_due" && "Notification" in window && Notification.permission === "granted") {
             void (async () => {
-              if ("serviceWorker" in navigator) {
+              // When the tab is hidden and push is subscribed, let the SW notify.
+              // When visible, always show — WS counts as "delivered" server-side even if
+              // push fails or is suppressed in the foreground.
+              if (document.visibilityState !== "visible" && "serviceWorker" in navigator) {
                 try {
                   const reg = await navigator.serviceWorker.ready;
                   if (await reg.pushManager.getSubscription()) return;
@@ -268,6 +271,7 @@ export function App() {
   async function startMorning() {
     setTab("morning");
     setChat([]);
+    setDraft("");
     const res = await runAi("checkin", "");
     const reply = String(res.result.reply ?? "What's the easiest thing you can do today?");
     setChat([{ role: "them", text: reply }]);
@@ -276,6 +280,7 @@ export function App() {
 
   async function runMidday() {
     setTab("midday");
+    setDraft("");
     const res = await runAi("midday", "");
     const reply = String(res.result.reply ?? "Quick check — how's it going?");
     setChat([{ role: "them", text: reply }]);
