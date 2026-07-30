@@ -195,7 +195,7 @@ app.post("/api/ai/:engine", async (c) => {
         ? {
             now_local: ctx.now_local ?? new Date().toISOString(),
             day_key: ctx.day_key ?? ctx.dayKey ?? null,
-            yesterday_priorities: ctx.yesterday_priorities ?? ctx.priorities ?? [],
+            yesterday_priorities: ctx.yesterday_priorities ?? [],
             mode: ctx.mode ?? "soft_confirm_on_open",
             user_message: body.message ?? null,
             gratitude_anchor: ctx.gratitude_anchor ?? null,

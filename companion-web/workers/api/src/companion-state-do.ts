@@ -143,6 +143,16 @@ export class CompanionStateDO extends DurableObject<Env> {
     }
     if (url.pathname === "/wipe" && request.method === "POST") {
       this.ctx.storage.sql.exec(`DELETE FROM events`);
+      const userId = this.ctx.id.name;
+      if (userId && this.env.DB) {
+        try {
+          await this.env.DB.prepare(`DELETE FROM event_log WHERE user_id = ?`)
+            .bind(userId)
+            .run();
+        } catch {
+          /* D1 may be unset in local dry-run — DO SQLite remains source of truth */
+        }
+      }
       const tz = (await this.getState()).settings.ianaTimeZone;
       await this.ctx.storage.put("state", {
         priorities: [],
