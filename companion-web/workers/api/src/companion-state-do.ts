@@ -45,6 +45,8 @@ function isQuietHours(hour: number, start: number | null, end: number | null): b
   return hour >= start || hour < end;
 }
 
+const NUDGE_RETRY_MS = 15 * 60_000;
+
 const ALLOWED_SETTINGS_KEYS = new Set([
   "checkinHour",
   "reflectionHour",
@@ -256,14 +258,23 @@ export class CompanionStateDO extends DurableObject<Env> {
     }
 
     let meaningfulDelivered = false;
+    const failedKinds: NudgeKind[] = [];
     for (const kind of kinds) {
       if (await this.deliverNudge(kind, hour)) {
         if (kind !== "chime") meaningfulDelivered = true;
+      } else if (kind !== "chime") {
+        failedKinds.push(kind);
       }
     }
     if (meaningfulDelivered && !enteredBackoff) {
       state.settings.engagement.lastNudgeAt = Math.floor(now / 1000);
       await this.ctx.storage.put("state", state);
+    }
+    if (failedKinds.length) {
+      const retryAt = now + NUDGE_RETRY_MS;
+      await this.ctx.storage.put("nextAlarm", { kinds: failedKinds, at: retryAt });
+      await this.ctx.storage.setAlarm(retryAt);
+      return;
     }
     await this.scheduleNextAlarm();
   }
@@ -364,10 +375,17 @@ export class CompanionStateDO extends DurableObject<Env> {
         await this.ctx.storage.put("state", state);
       } else if (state.dayKey !== today) {
         state.yesterdayPriorities = state.priorities.map((p) => ({ ...p }));
+        if (state.settings.engagement.lastNudgeAt) {
+          state.settings.engagement.missedNudges += 1;
+          if (state.settings.engagement.missedNudges >= 3) {
+            state.settings.engagement.backoffUntil = Math.floor(Date.now() / 1000) + 24 * 3600;
+            state.settings.engagement.missedNudges = 0;
+          }
+          state.settings.engagement.lastNudgeAt = null;
+        }
         state.dayKey = today;
         state.dayLog = [];
         state.lastBrief = null;
-        state.settings.engagement.lastNudgeAt = null;
         await this.ctx.storage.put("state", state);
       }
     }
