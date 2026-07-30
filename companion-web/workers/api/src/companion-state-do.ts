@@ -206,11 +206,12 @@ export class CompanionStateDO extends DurableObject<Env> {
       return;
     }
 
-    const kinds =
+    const kinds = (
       planned?.kinds?.length ? planned.kinds : (() => {
         const k = this.nudgeKindForHour(state, hour);
         return k ? [k] : [];
-      })();
+      })()
+    ).filter((k) => !this.isNudgeCompletedForDay(k, state));
     if (!kinds.length) {
       await this.scheduleNextAlarm();
       return;
@@ -249,6 +250,23 @@ export class CompanionStateDO extends DurableObject<Env> {
       // chime-only: delivered but does not participate in miss/backoff tracking
     }
     await this.scheduleNextAlarm();
+  }
+
+  private hasEventForDay(kind: CompanionEventKind, dayKey: string): boolean {
+    const rows = this.ctx.storage.sql
+      .exec(`SELECT 1 FROM events WHERE kind = ? AND day_key = ? LIMIT 1`, kind, dayKey)
+      .toArray();
+    return rows.length > 0;
+  }
+
+  private isNudgeCompletedForDay(kind: NudgeKind, state: StoredState): boolean {
+    if (kind === "morning") {
+      return this.hasEventForDay("checkin_completed", state.dayKey);
+    }
+    if (kind === "evening") {
+      return state.lastBrief != null;
+    }
+    return false;
   }
 
   private nudgeKindForHour(state: StoredState, hour: number): NudgeKind | null {
@@ -366,8 +384,10 @@ export class CompanionStateDO extends DurableObject<Env> {
     const id = Number(idRow.id);
 
     if (kind === "priority_set") {
-      const priorities = (payload as { priorities: Priority[] }).priorities;
-      state.priorities = priorities;
+      const priorities = (payload as { priorities: unknown }).priorities;
+      if (Array.isArray(priorities)) {
+        state.priorities = priorities as Priority[];
+      }
     }
     if (kind === "overwhelm_on") {
       state.settings.overwhelmUntil = nextDayBoundaryUnix(Date.now(), state.settings.ianaTimeZone);
@@ -432,8 +452,12 @@ export class CompanionStateDO extends DurableObject<Env> {
     const addHour = (h: number, kind: NudgeKind) => {
       candidates.push({ at: nextUnixForLocalHour(h, tz, now), kind });
     };
-    addHour(state.settings.checkinHour, "morning");
-    addHour(state.settings.reflectionHour, "evening");
+    if (!this.isNudgeCompletedForDay("morning", state)) {
+      addHour(state.settings.checkinHour, "morning");
+    }
+    if (!this.isNudgeCompletedForDay("evening", state)) {
+      addHour(state.settings.reflectionHour, "evening");
+    }
     if (state.settings.eatReminderEnabled) addHour(state.settings.eatReminderHour, "eat");
     if (state.settings.chimeFrequencyMin && state.settings.chimeFrequencyMin > 0) {
       candidates.push({ at: now + state.settings.chimeFrequencyMin * 60_000, kind: "chime" });
