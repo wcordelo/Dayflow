@@ -93,17 +93,18 @@ export function App() {
           if (msg.type === "engagement_backoff" && msg.state) setState(msg.state);
           if (msg.type === "nudge_due" && "Notification" in window && Notification.permission === "granted") {
             void (async () => {
-              // When the tab is hidden and push is subscribed, let the SW notify.
-              // When visible, always show — WS counts as "delivered" server-side even if
-              // push fails or is suppressed in the foreground.
-              if (document.visibilityState !== "visible" && "serviceWorker" in navigator) {
+              // Prefer Web Push when subscribed. Still notify when the tab is visible so a
+              // failed/suppressed push doesn't leave a silent WS delivery (same tag coalesces).
+              let hasPush = false;
+              if ("serviceWorker" in navigator) {
                 try {
                   const reg = await navigator.serviceWorker.ready;
-                  if (await reg.pushManager.getSubscription()) return;
+                  hasPush = !!(await reg.pushManager.getSubscription());
                 } catch {
-                  /* fall through to in-app notification */
+                  /* fall through */
                 }
               }
+              if (hasPush && document.visibilityState !== "visible") return;
               const copy =
                 msg.kind === "morning"
                   ? "Gentle morning check-in when you're ready."
@@ -773,7 +774,10 @@ export function App() {
             type="button"
             className={tab === id ? "active" : ""}
             disabled={!hasConsent && id !== "home" && id !== "settings"}
-            onClick={() => setTab(id)}
+            onClick={() => {
+              if (id === "morning" || id === "midday") setDraft("");
+              setTab(id);
+            }}
           >
             {label}
           </button>

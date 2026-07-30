@@ -258,8 +258,8 @@ export class CompanionStateDO extends DurableObject<Env> {
       return;
     }
 
-    // Ambient chimes never drive backoff — only morning/evening/eat.
-    const meaningful = kinds.filter((k) => k !== "chime");
+    // Ambient chimes and eat reminders never drive backoff — only morning/evening.
+    const meaningful = kinds.filter((k) => k !== "chime" && k !== "eat");
 
     // Previous delivered meaningful nudge still unanswered → soft miss.
     // Still deliver *this* alarm's nudge; backoff only suppresses later alarms.
@@ -286,8 +286,9 @@ export class CompanionStateDO extends DurableObject<Env> {
     const failedKinds: NudgeKind[] = [];
     for (const kind of kinds) {
       if (await this.deliverNudge(kind, hour)) {
-        if (kind !== "chime") meaningfulDelivered = true;
+        if (kind !== "chime" && kind !== "eat") meaningfulDelivered = true;
       } else if (kind !== "chime") {
+        // Retry eat/morning/evening delivery failures; ambient chimes stay best-effort.
         failedKinds.push(kind);
       }
     }
@@ -342,6 +343,7 @@ export class CompanionStateDO extends DurableObject<Env> {
     this.broadcast(msg);
 
     let pushed = false;
+    let hadPushSubs = false;
     const userId = this.ctx.id.name;
     if (
       userId &&
@@ -353,6 +355,7 @@ export class CompanionStateDO extends DurableObject<Env> {
       if (raw) {
         const parsed = JSON.parse(raw) as unknown;
         const subs = Array.isArray(parsed) ? parsed : [parsed];
+        hadPushSubs = subs.length > 0;
         for (const sub of subs) {
           const ok = await sendWebPush({
             subscriptionJson: JSON.stringify(sub),
@@ -367,7 +370,8 @@ export class CompanionStateDO extends DurableObject<Env> {
         }
       }
     }
-    return hadWs || pushed;
+    // Idle/background sockets alone are not delivery — require push when subscribed.
+    return hadPushSubs ? pushed : hadWs;
   }
 
   private async getState(): Promise<StoredState> {
