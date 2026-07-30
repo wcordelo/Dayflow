@@ -225,23 +225,24 @@ export class CompanionStateDO extends DurableObject<Env> {
     const meaningful = kinds.filter((k) => k !== "chime");
 
     // Previous delivered meaningful nudge still unanswered → soft miss.
+    // Still deliver *this* alarm's nudge; backoff only suppresses later alarms.
+    let enteredBackoff = false;
     if (meaningful.length && state.settings.engagement.lastNudgeAt) {
       state.settings.engagement.missedNudges += 1;
       if (state.settings.engagement.missedNudges >= 3) {
         state.settings.engagement.backoffUntil = Math.floor(now / 1000) + 24 * 3600;
         state.settings.engagement.missedNudges = 0;
         state.settings.engagement.lastNudgeAt = null;
-        await this.ctx.storage.put("state", state);
+        enteredBackoff = true;
+      }
+      await this.ctx.storage.put("state", state);
+      if (enteredBackoff) {
         this.broadcast({
           type: "engagement_backoff",
           until: state.settings.engagement.backoffUntil,
           state,
         });
-        await this.scheduleNextAlarm();
-        return;
       }
-      // Persist miss even if the upcoming delivery fails (offline / push error).
-      await this.ctx.storage.put("state", state);
     }
 
     let meaningfulDelivered = false;
@@ -250,7 +251,7 @@ export class CompanionStateDO extends DurableObject<Env> {
         if (kind !== "chime") meaningfulDelivered = true;
       }
     }
-    if (meaningfulDelivered) {
+    if (meaningfulDelivered && !enteredBackoff) {
       state.settings.engagement.lastNudgeAt = Math.floor(now / 1000);
       await this.ctx.storage.put("state", state);
     }
