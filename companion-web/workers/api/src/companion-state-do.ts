@@ -346,6 +346,7 @@ export class CompanionStateDO extends DurableObject<Env> {
         state.dayKey = today;
         state.dayLog = [];
         state.lastBrief = null;
+        state.settings.engagement.lastNudgeAt = null;
         await this.ctx.storage.put("state", state);
       }
     }
@@ -413,6 +414,12 @@ export class CompanionStateDO extends DurableObject<Env> {
     if (kind === "day_log_note") {
       const note = (payload as { note: string }).note;
       state.dayLog.push(note);
+    }
+    if (kind === "gratitude") {
+      const text = (payload as { text: string }).text;
+      if (typeof text === "string" && text.trim()) {
+        state.dayLog.push(text.trim());
+      }
     }
     if (kind === "brief_generated") {
       state.lastBrief = payload;

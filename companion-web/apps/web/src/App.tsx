@@ -31,12 +31,18 @@ export function App() {
   });
 
   const tts = state?.settings.ttsEnabled ?? true;
+  const hasConsent = state?.settings.healthDataConsent ?? false;
   const overwhelmed = !!(state?.settings.overwhelmUntil && state.settings.overwhelmUntil * 1000 > Date.now());
   const listenRef = useRef<{ stop: () => void } | null>(null);
   const stateRef = useRef<ServerState | null>(null);
   useEffect(() => {
     stateRef.current = state;
   }, [state]);
+
+  useEffect(() => {
+    if (!state) return;
+    setBrief(state.lastBrief ? (state.lastBrief as typeof brief) : null);
+  }, [state?.lastBrief, state?.dayKey]);
 
   const refresh = useCallback(async () => {
     try {
@@ -418,19 +424,20 @@ export function App() {
               {!state?.priorities?.length && <li className="muted">No priorities yet — try morning check-in.</li>}
             </ul>
             <div className="row" style={{ marginTop: "0.75rem" }}>
-              <button className="btn" type="button" onClick={() => void startMorning()}>
+              <button className="btn" type="button" onClick={() => void startMorning()} disabled={!hasConsent}>
                 Morning
               </button>
-              <button className="btn secondary" type="button" onClick={() => void runMidday()}>
+              <button className="btn secondary" type="button" onClick={() => void runMidday()} disabled={!hasConsent}>
                 Midday
               </button>
-              <button className="btn secondary" type="button" onClick={() => void runEvening()}>
+              <button className="btn secondary" type="button" onClick={() => void runEvening()} disabled={!hasConsent}>
                 Evening
               </button>
               {state?.settings.eatReminderEnabled && (
                 <button
                   className="btn ghost"
                   type="button"
+                  disabled={!hasConsent}
                   onClick={() => {
                     speak("Gentle reminder — have you eaten something today?", tts);
                     void mutate("day_log_note", { note: "Eat nudge shown" });
@@ -459,6 +466,7 @@ export function App() {
               <button
                 className="btn secondary"
                 type="button"
+                disabled={!hasConsent}
                 onClick={() => {
                   const note = draft.trim();
                   if (!note) return;
@@ -501,12 +509,18 @@ export function App() {
           ))}
           {tab === "midday" && (
             <div className="row" style={{ margin: "0.75rem 0" }}>
-              <button className="btn secondary" type="button" onClick={() => void answerChime("Yes, on it")}>
+              <button
+                className="btn secondary"
+                type="button"
+                disabled={!hasConsent}
+                onClick={() => void answerChime("Yes, on it")}
+              >
                 On it
               </button>
               <button
                 className="btn secondary"
                 type="button"
+                disabled={!hasConsent}
                 onClick={() => void answerChime("Got sidetracked, back on it")}
               >
                 Sidetracked
@@ -523,18 +537,23 @@ export function App() {
             onChange={(e) => setDraft(e.target.value)}
           />
           <div className="row" style={{ marginTop: "0.75rem" }}>
-            <button className={`mic ${listening ? "live" : ""}`} type="button" onClick={toggleMic}>
+            <button
+              className={`mic ${listening ? "live" : ""}`}
+              type="button"
+              onClick={toggleMic}
+              disabled={!hasConsent}
+            >
               {listening ? "…" : "🎤"}
             </button>
             <button
               className="btn"
               type="button"
               onClick={() => void (tab === "midday" ? sendMidday() : sendMorning())}
-              disabled={!draft.trim()}
+              disabled={!hasConsent || !draft.trim()}
             >
               Send
             </button>
-            <button className="btn ghost" type="button" onClick={() => void friendReframe()}>
+            <button className="btn ghost" type="button" onClick={() => void friendReframe()} disabled={!hasConsent}>
               I&apos;m being hard on myself
             </button>
           </div>
@@ -544,7 +563,7 @@ export function App() {
       {tab === "evening" && (
         <section className="panel">
           {!brief && (
-            <button className="btn" type="button" onClick={() => void runEvening()}>
+            <button className="btn" type="button" onClick={() => void runEvening()} disabled={!hasConsent}>
               Reflect on today
             </button>
           )}
@@ -563,6 +582,7 @@ export function App() {
                 <button
                   className="btn secondary"
                   type="button"
+                  disabled={!hasConsent}
                   onClick={() => {
                     if (!gratitude.trim()) return;
                     void mutate("gratitude", { text: gratitude.trim() }).then(() => setGratitude(""));
@@ -679,7 +699,13 @@ export function App() {
             ["settings", "Settings"],
           ] as const
         ).map(([id, label]) => (
-          <button key={id} type="button" className={tab === id ? "active" : ""} onClick={() => setTab(id)}>
+          <button
+            key={id}
+            type="button"
+            className={tab === id ? "active" : ""}
+            disabled={!hasConsent && id !== "home" && id !== "settings"}
+            onClick={() => setTab(id)}
+          >
             {label}
           </button>
         ))}
