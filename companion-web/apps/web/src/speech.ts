@@ -56,7 +56,7 @@ export function startListening(opts: {
   rec.continuous = false;
   rec.interimResults = true;
   rec.lang = "en-US";
-  void preferOnDevice(rec);
+  let stopped = false;
   rec.onresult = (ev) => {
     let interim = "";
     let final = "";
@@ -70,8 +70,15 @@ export function startListening(opts: {
   };
   rec.onerror = (e) => opts.onError(e.error);
   rec.onend = () => {};
-  rec.start();
-  return { stop: () => rec.stop() };
+  void preferOnDevice(rec).then(() => {
+    if (!stopped) rec.start();
+  });
+  return {
+    stop: () => {
+      stopped = true;
+      rec.stop();
+    },
+  };
 }
 
 export function speak(text: string, enabled: boolean) {

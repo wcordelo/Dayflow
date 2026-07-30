@@ -158,7 +158,7 @@ export function App() {
       now_local: now.toISOString(),
       day_key: s?.dayKey ?? null,
       priorities: s?.priorities ?? [],
-      yesterday_priorities: (s?.priorities ?? []).map((p) => ({
+      yesterday_priorities: (s?.yesterdayPriorities ?? []).map((p) => ({
         id: p.id,
         text: p.text,
         status_hint: p.status,

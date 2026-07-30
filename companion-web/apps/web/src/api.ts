@@ -18,6 +18,7 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
 
 export type ServerState = {
   priorities: Array<{ id: string; text: string; status: string }>;
+  yesterdayPriorities?: Array<{ id: string; text: string; status: string }>;
   settings: {
     checkinHour: number;
     reflectionHour: number;

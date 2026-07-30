@@ -31,6 +31,7 @@ export type Env = {
 
 type StoredState = {
   priorities: Priority[];
+  yesterdayPriorities: Priority[];
   settings: UserSettings;
   dayKey: string;
   dayLog: string[];
@@ -92,6 +93,7 @@ export class CompanionStateDO extends DurableObject<Env> {
       if (!existing) {
         await this.ctx.storage.put("state", {
           priorities: [],
+          yesterdayPriorities: [],
           settings: { ...DEFAULT_SETTINGS },
           dayKey: "pending",
           dayLog: [],
@@ -144,6 +146,7 @@ export class CompanionStateDO extends DurableObject<Env> {
       const tz = (await this.getState()).settings.ianaTimeZone;
       await this.ctx.storage.put("state", {
         priorities: [],
+        yesterdayPriorities: [],
         settings: {
           ...DEFAULT_SETTINGS,
           healthDataConsent: false,
@@ -319,6 +322,9 @@ export class CompanionStateDO extends DurableObject<Env> {
 
   private async getState(): Promise<StoredState> {
     const state = (await this.ctx.storage.get<StoredState>("state"))!;
+    if (!state.yesterdayPriorities) {
+      state.yesterdayPriorities = [];
+    }
     if (!state.settings.engagement) {
       state.settings.engagement = { ...DEFAULT_ENGAGEMENT };
     }
@@ -346,6 +352,7 @@ export class CompanionStateDO extends DurableObject<Env> {
         state.dayKey = today;
         await this.ctx.storage.put("state", state);
       } else if (state.dayKey !== today) {
+        state.yesterdayPriorities = state.priorities.map((p) => ({ ...p }));
         state.dayKey = today;
         state.dayLog = [];
         state.lastBrief = null;
@@ -538,12 +545,7 @@ export class CompanionStateDO extends DurableObject<Env> {
         const end = state.settings.quietHoursEnd;
         if (end == null) return null;
         const shiftedAt = nextUnixForLocalHour(end, tz, c.at);
-        const shiftedHour = zonedParts(new Date(shiftedAt), tz).hour;
-        const kind =
-          c.kind === "chime"
-            ? c.kind
-            : this.nudgeKindForHour(state, shiftedHour) ?? c.kind;
-        return { at: shiftedAt, kind };
+        return { at: shiftedAt, kind: c.kind };
       })
       .filter((c): c is { at: number; kind: NudgeKind } => !!c && c.at > now);
 
