@@ -188,7 +188,7 @@ app.post("/api/ai/:engine", async (c) => {
   if (!userKey) {
     return c.json({
       source: "local_template",
-      result: JSON.parse(localFallback(engine, body.message)),
+      result: JSON.parse(localFallback(engine, body.message, body.context)),
     });
   }
 
@@ -226,14 +226,26 @@ app.post("/api/ai/:engine", async (c) => {
     try {
       parsed = JSON.parse(text);
     } catch {
-      parsed = { reply: text, raw: true };
+      parsed =
+        engine === "brief"
+          ? JSON.parse(localFallback(engine, body.message, body.context))
+          : { reply: text, raw: true };
+    }
+    if (
+      engine === "brief" &&
+      (!parsed ||
+        typeof parsed !== "object" ||
+        typeof (parsed as Record<string, unknown>).headline !== "string" ||
+        !Array.isArray((parsed as Record<string, unknown>).accomplishments))
+    ) {
+      parsed = JSON.parse(localFallback(engine, body.message, body.context));
     }
     return c.json({ source: "openrouter", model, result: parsed });
   } catch (e) {
     return c.json({
       source: "local_template",
       error: e instanceof Error ? e.message : "ai_failed",
-      result: JSON.parse(localFallback(engine, body.message)),
+      result: JSON.parse(localFallback(engine, body.message, body.context)),
     });
   }
 });

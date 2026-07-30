@@ -305,10 +305,20 @@ export function App() {
       })),
     });
     const res = await runAi("brief", payload);
-    const result = res.result as typeof brief;
-    setBrief(result);
-    await mutate("brief_generated", result);
-    const speakText = [result?.headline, ...(result?.accomplishments ?? []).slice(0, 2)]
+    const result = res.result;
+    const validBrief =
+      result &&
+      typeof result === "object" &&
+      typeof result.headline === "string" &&
+      Array.isArray(result.accomplishments);
+    if (!validBrief) {
+      setBrief(null);
+      return;
+    }
+    const briefResult = result as NonNullable<typeof brief>;
+    setBrief(briefResult);
+    await mutate("brief_generated", briefResult);
+    const speakText = [briefResult.headline, ...(briefResult.accomplishments ?? []).slice(0, 2)]
       .filter(Boolean)
       .join(". ");
     if (speakText) speak(speakText, tts);

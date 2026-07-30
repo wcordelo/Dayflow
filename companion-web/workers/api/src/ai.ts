@@ -49,15 +49,40 @@ export function promptForEngine(engine: "checkin" | "brief" | "midday"): string 
 }
 
 /** Local template fallback when no API key — still shame-free. */
-export function localFallback(engine: "checkin" | "brief" | "midday", userMessage?: string): string {
+export function localFallback(
+  engine: "checkin" | "brief" | "midday",
+  userMessage?: string,
+  context?: unknown,
+): string {
   if (engine === "brief") {
+    const ctx = (context ?? {}) as Record<string, unknown>;
+    const dayLog = Array.isArray(ctx.day_log)
+      ? ctx.day_log
+      : Array.isArray(ctx.dayLog)
+        ? ctx.dayLog
+        : [];
+    const priorities = Array.isArray(ctx.priorities) ? ctx.priorities : [];
+    const accomplishments: string[] = [];
+    for (const note of dayLog) {
+      if (typeof note === "string" && note.trim()) {
+        accomplishments.push(note.trim().slice(0, 120));
+      }
+    }
+    for (const p of priorities) {
+      if (p && typeof p === "object" && "text" in p && typeof p.text === "string") {
+        const text = p.text.trim();
+        if (text) accomplishments.push(`You set intention: ${text.slice(0, 80)}`);
+      }
+    }
+    if (accomplishments.length === 0 && userMessage?.trim()) {
+      accomplishments.push(`You noted: ${userMessage.trim().slice(0, 120)}`);
+    }
+    if (accomplishments.length === 0) {
+      accomplishments.push("You opened reflection — that counts as showing up.");
+    }
     return JSON.stringify({
       headline: "You showed up today",
-      accomplishments: [
-        userMessage?.trim()
-          ? `You noted: ${userMessage.trim().slice(0, 120)}`
-          : "You opened reflection — that counts as orientation.",
-      ],
+      accomplishments: accomplishments.slice(0, 5),
       priority_outcomes: [],
       gentle_close: "Tomorrow is a fresh start.",
       gratitude_prompt: "One thing that went okay today?",
@@ -74,7 +99,7 @@ export function localFallback(engine: "checkin" | "brief" | "midday", userMessag
     reply:
       "What's the easiest thing you can do today — or what can you finish fastest for a quick win? You can also keep yesterday's list if it still fits.",
     priorities: [],
-    needs_user_input: true,
+    needs_user_input: !userMessage?.trim(),
     tone_flags: {
       shame_free: true,
       no_skipped_framing: true,
