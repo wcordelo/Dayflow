@@ -277,17 +277,22 @@ export class CompanionStateDO extends DurableObject<Env> {
       this.env.VAPID_PRIVATE_KEY &&
       this.env.VAPID_SUBJECT
     ) {
-      const sub = await this.env.KV.get(`push:${userId}`);
-      if (sub) {
-        pushed = await sendWebPush({
-          subscriptionJson: sub,
-          vapid: {
-            subject: this.env.VAPID_SUBJECT,
-            publicKey: this.env.VAPID_PUBLIC_KEY,
-            privateKey: this.env.VAPID_PRIVATE_KEY,
-          },
-          kind,
-        });
+      const raw = await this.env.KV.get(`push:${userId}`);
+      if (raw) {
+        const parsed = JSON.parse(raw) as unknown;
+        const subs = Array.isArray(parsed) ? parsed : [parsed];
+        for (const sub of subs) {
+          const ok = await sendWebPush({
+            subscriptionJson: JSON.stringify(sub),
+            vapid: {
+              subject: this.env.VAPID_SUBJECT,
+              publicKey: this.env.VAPID_PUBLIC_KEY,
+              privateKey: this.env.VAPID_PRIVATE_KEY,
+            },
+            kind,
+          });
+          if (ok) pushed = true;
+        }
       }
     }
     return hadWs || pushed;
@@ -304,7 +309,8 @@ export class CompanionStateDO extends DurableObject<Env> {
     if (state.settings.engagement.lastCountedDayKey === undefined) {
       state.settings.engagement.lastCountedDayKey = null;
     }
-    const week = isoWeekKey();
+    const tz = state.settings.ianaTimeZone;
+    const week = isoWeekKey(new Date(), tz);
     if (state.settings.engagement.weekKey !== week) {
       state.settings.engagement = {
         weekKey: week,
@@ -315,7 +321,6 @@ export class CompanionStateDO extends DurableObject<Env> {
         lastNudgeAt: state.settings.engagement.lastNudgeAt,
       };
     }
-    const tz = state.settings.ianaTimeZone;
     if (tz) {
       const today = logicalDayKey(new Date(), tz);
       if (state.dayKey === "pending") {

@@ -33,6 +33,10 @@ export function App() {
   const tts = state?.settings.ttsEnabled ?? true;
   const overwhelmed = !!(state?.settings.overwhelmUntil && state.settings.overwhelmUntil * 1000 > Date.now());
   const listenRef = useRef<{ stop: () => void } | null>(null);
+  const stateRef = useRef<ServerState | null>(null);
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
 
   const refresh = useCallback(async () => {
     try {
@@ -167,37 +171,33 @@ export function App() {
     const rawPriorities = res.result.priorities as
       | Array<{ text: string; action: string }>
       | undefined;
-    if (rawPriorities !== undefined) {
-      if (rawPriorities.length === 0) {
-        await mutate("priority_set", { priorities: [] });
-      } else {
-        const drops = new Set(
-          rawPriorities
-            .filter((p) => p.action === "drop" && p.text?.trim())
-            .map((p) => p.text.trim().toLowerCase()),
-        );
-        const mapped = rawPriorities
-          .filter((p) => p.action !== "drop" && p.text?.trim())
-          .map((p) => ({
-            id: crypto.randomUUID(),
-            text: p.text.trim(),
-            status: "active" as const,
-            source: "checkin",
-          }));
-        let next = (state?.priorities ?? []).filter(
-          (p) => !drops.has(p.text.trim().toLowerCase()),
-        );
-        for (const p of mapped) {
-          const key = p.text.trim().toLowerCase();
-          const idx = next.findIndex((e) => e.text.trim().toLowerCase() === key);
-          if (idx >= 0) {
-            next[idx] = { ...next[idx], text: p.text, status: "active" };
-          } else {
-            next.push(p);
-          }
+    if (rawPriorities !== undefined && rawPriorities.length > 0) {
+      const drops = new Set(
+        rawPriorities
+          .filter((p) => p.action === "drop" && p.text?.trim())
+          .map((p) => p.text.trim().toLowerCase()),
+      );
+      const mapped = rawPriorities
+        .filter((p) => p.action !== "drop" && p.text?.trim())
+        .map((p) => ({
+          id: crypto.randomUUID(),
+          text: p.text.trim(),
+          status: "active" as const,
+          source: "checkin",
+        }));
+      let next = (stateRef.current?.priorities ?? []).filter(
+        (p) => !drops.has(p.text.trim().toLowerCase()),
+      );
+      for (const p of mapped) {
+        const key = p.text.trim().toLowerCase();
+        const idx = next.findIndex((e) => e.text.trim().toLowerCase() === key);
+        if (idx >= 0) {
+          next[idx] = { ...next[idx], text: p.text, status: "active" };
+        } else {
+          next.push(p);
         }
-        if (mapped.length || drops.size) await mutate("priority_set", { priorities: next });
       }
+      if (mapped.length || drops.size) await mutate("priority_set", { priorities: next });
     }
     await mutate("checkin_completed", { reply, source: res.source });
   }

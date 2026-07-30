@@ -34,8 +34,18 @@ app.get("/api/vapid-public-key", (c) =>
 app.post("/api/push/subscribe", async (c) => {
   const user = await resolveUser(c);
   if (!user) return c.json({ error: "unauthorized" }, 401);
-  const body = await c.req.json();
-  await c.env.KV.put(`push:${user.id}`, JSON.stringify(body));
+  const body = (await c.req.json()) as { endpoint?: string };
+  if (!body.endpoint) return c.json({ error: "invalid subscription" }, 400);
+  const key = `push:${user.id}`;
+  const existing = await c.env.KV.get(key);
+  const subs: unknown[] = existing
+    ? (() => {
+        const parsed = JSON.parse(existing) as unknown;
+        return Array.isArray(parsed) ? parsed : [parsed];
+      })()
+    : [];
+  const next = [...subs.filter((s) => (s as { endpoint?: string }).endpoint !== body.endpoint), body];
+  await c.env.KV.put(key, JSON.stringify(next));
   return c.json({ ok: true });
 });
 

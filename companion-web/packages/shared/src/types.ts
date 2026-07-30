@@ -21,6 +21,8 @@ export type EngagementState = {
   lastNudgeAt: number | null;
 };
 
+import { logicalDayKey } from "./dayBoundary.js";
+
 export type UserSettings = {
   checkinHour: number;
   reflectionHour: number;
@@ -38,8 +40,19 @@ export type UserSettings = {
   engagement: EngagementState;
 };
 
-export function isoWeekKey(d = new Date()): string {
-  const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+export function isoWeekKey(d = new Date(), timeZone?: string | null): string {
+  let year: number;
+  let month: number;
+  let day: number;
+  if (timeZone) {
+    const key = logicalDayKey(d, timeZone);
+    [year, month, day] = key.split("-").map(Number) as [number, number, number];
+  } else {
+    year = d.getFullYear();
+    month = d.getMonth() + 1;
+    day = d.getDate();
+  }
+  const date = new Date(Date.UTC(year, month - 1, day));
   const dayNum = date.getUTCDay() || 7;
   date.setUTCDate(date.getUTCDate() + 4 - dayNum);
   const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
