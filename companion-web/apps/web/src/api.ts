@@ -1,5 +1,11 @@
 const API = import.meta.env.VITE_API_BASE ?? "";
 
+export function wsUrl(path: string): string {
+  const origin = API ? new URL(API, window.location.origin).origin : window.location.origin;
+  const wsProto = origin.startsWith("https") ? "wss:" : "ws:";
+  return `${wsProto}//${new URL(origin).host}${path}`;
+}
+
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API}${path}`, {
     ...init,

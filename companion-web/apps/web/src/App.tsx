@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api, type ServerState } from "./api";
+import { api, wsUrl, type ServerState } from "./api";
 import { speak, speechSupported, startListening } from "./speech";
 
 type Tab = "home" | "morning" | "midday" | "evening" | "settings";
@@ -73,15 +73,14 @@ export function App() {
   // Real-time nudge relay (CompanionStateDO WebSocket).
   useEffect(() => {
     if (!user) return;
-    const proto = window.location.protocol === "https:" ? "wss" : "ws";
-    const wsUrl = `${proto}://${window.location.host}/api/ws`;
+    const socketUrl = wsUrl("/api/ws");
     let ws: WebSocket | null = null;
     let closed = false;
     let retry: number | undefined;
 
     const connect = () => {
       if (closed) return;
-      ws = new WebSocket(wsUrl);
+      ws = new WebSocket(socketUrl);
       ws.onmessage = (ev) => {
         try {
           const msg = JSON.parse(String(ev.data)) as {
@@ -93,15 +92,25 @@ export function App() {
           if (msg.type === "event" && msg.state) setState(msg.state);
           if (msg.type === "engagement_backoff" && msg.state) setState(msg.state);
           if (msg.type === "nudge_due" && "Notification" in window && Notification.permission === "granted") {
-            const copy =
-              msg.kind === "morning"
-                ? "Gentle morning check-in when you're ready."
-                : msg.kind === "evening"
-                  ? "Evening reflection — what went okay today?"
-                  : msg.kind === "eat"
-                    ? "Have you eaten something today?"
-                    : "Quick time check — how's it going?";
-            new Notification("Companion", { body: copy, tag: `companion-${msg.kind ?? "chime"}` });
+            void (async () => {
+              if ("serviceWorker" in navigator) {
+                try {
+                  const reg = await navigator.serviceWorker.ready;
+                  if (await reg.pushManager.getSubscription()) return;
+                } catch {
+                  /* fall through to in-app notification */
+                }
+              }
+              const copy =
+                msg.kind === "morning"
+                  ? "Gentle morning check-in when you're ready."
+                  : msg.kind === "evening"
+                    ? "Evening reflection — what went okay today?"
+                    : msg.kind === "eat"
+                      ? "Have you eaten something today?"
+                      : "Quick time check — how's it going?";
+              new Notification("Companion", { body: copy, tag: `companion-${msg.kind ?? "chime"}` });
+            })();
           }
         } catch {
           /* ignore */
@@ -191,7 +200,7 @@ export function App() {
     setChat((c) => [...c, { role: "them", text: reply }]);
     speak(reply, tts);
     const rawPriorities = res.result.priorities as
-      | Array<{ text: string; action: string }>
+      | Array<{ id?: string | null; text: string; action: string }>
       | undefined;
     const wantsClear =
       res.result.clear_priorities === true ||
@@ -201,32 +210,44 @@ export function App() {
     if (wantsClear) {
       await mutate("priority_set", { priorities: [] });
     } else if (rawPriorities !== undefined && rawPriorities.length > 0) {
-      const drops = new Set(
+      const dropIds = new Set(
+        rawPriorities.filter((p) => p.action === "drop" && p.id).map((p) => p.id!),
+      );
+      const dropTexts = new Set(
         rawPriorities
           .filter((p) => p.action === "drop" && p.text?.trim())
           .map((p) => p.text.trim().toLowerCase()),
       );
-      const mapped = rawPriorities
-        .filter((p) => p.action !== "drop" && p.text?.trim())
-        .map((p) => ({
-          id: crypto.randomUUID(),
-          text: p.text.trim(),
-          status: "active" as const,
-          source: "checkin",
-        }));
       let next = (stateRef.current?.priorities ?? []).filter(
-        (p) => !drops.has(p.text.trim().toLowerCase()),
+        (p) => !dropIds.has(p.id) && !dropTexts.has(p.text.trim().toLowerCase()),
       );
-      for (const p of mapped) {
-        const key = p.text.trim().toLowerCase();
+      for (const p of rawPriorities.filter((p) => p.action !== "drop" && p.text?.trim())) {
+        const trimmed = p.text.trim();
+        if ((p.action === "edit" || p.action === "keep") && p.id) {
+          const idx = next.findIndex((e) => e.id === p.id);
+          if (idx >= 0) {
+            next[idx] = { ...next[idx], text: trimmed, status: "active" };
+            continue;
+          }
+        }
+        const key = trimmed.toLowerCase();
         const idx = next.findIndex((e) => e.text.trim().toLowerCase() === key);
         if (idx >= 0) {
-          next[idx] = { ...next[idx], text: p.text, status: "active" };
+          next[idx] = { ...next[idx], text: trimmed, status: "active" };
         } else {
-          next.push(p);
+          next.push({
+            id: p.action === "keep" && p.id ? p.id : crypto.randomUUID(),
+            text: trimmed,
+            status: "active" as const,
+            source: "checkin",
+          });
         }
       }
-      if (mapped.length || drops.size) await mutate("priority_set", { priorities: next });
+      const changed =
+        dropIds.size > 0 ||
+        dropTexts.size > 0 ||
+        rawPriorities.some((p) => p.action !== "drop" && p.text?.trim());
+      if (changed) await mutate("priority_set", { priorities: next });
     }
     if (res.result.needs_user_input !== true) {
       await mutate("checkin_completed", { reply, source: res.source });
@@ -651,8 +672,9 @@ export function App() {
             type="number"
             min={15}
             placeholder="30"
-            value={state.settings.chimeFrequencyMin ?? ""}
-            onChange={(e) =>
+            key={`chime-${state.settings.chimeFrequencyMin}`}
+            defaultValue={state.settings.chimeFrequencyMin ?? ""}
+            onBlur={(e) =>
               void saveSettings({
                 chimeFrequencyMin: e.target.value ? Number(e.target.value) : null,
               })
