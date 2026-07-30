@@ -66,6 +66,11 @@ app.delete("/api/me/data", async (c) => {
   if (!user) return c.json({ error: "unauthorized" }, 401);
   await c.env.KV.delete(`push:${user.id}`);
   await c.env.KV.delete(`orkey:${user.id}`);
+  try {
+    await c.env.DB.prepare(`DELETE FROM event_log WHERE user_id = ?`).bind(user.id).run();
+  } catch {
+    /* D1 may be unset locally */
+  }
   const stub = doStub(c.env, user.id);
   await stub.fetch("https://do/wipe", { method: "POST" });
   return c.json({ ok: true, deleted: true });
