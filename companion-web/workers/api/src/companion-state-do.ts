@@ -71,6 +71,16 @@ function pickAllowedSettings(patch: Partial<UserSettings>): Partial<UserSettings
   return allowed;
 }
 
+function redactStateWithoutConsent(state: StoredState): StoredState {
+  return {
+    ...state,
+    priorities: [],
+    yesterdayPriorities: [],
+    dayLog: [],
+    lastBrief: null,
+  };
+}
+
 const DDL = [
   `CREATE TABLE IF NOT EXISTS events (
      id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -112,14 +122,23 @@ export class CompanionStateDO extends DurableObject<Env> {
       const pair = new WebSocketPair();
       const [client, server] = Object.values(pair);
       this.ctx.acceptWebSocket(server);
-      server.send(JSON.stringify({ type: "hello", state: await this.getState() }));
+      const state = await this.getState();
+      const helloState = state.settings.healthDataConsent ? state : redactStateWithoutConsent(state);
+      server.send(JSON.stringify({ type: "hello", state: helloState }));
       return new Response(null, { status: 101, webSocket: client });
     }
 
     if (url.pathname === "/state" && request.method === "GET") {
-      return Response.json(await this.getState());
+      const state = await this.getState();
+      return Response.json(
+        state.settings.healthDataConsent ? state : redactStateWithoutConsent(state),
+      );
     }
     if (url.pathname === "/events" && request.method === "GET") {
+      const state = await this.getState();
+      if (!state.settings.healthDataConsent) {
+        return Response.json({ error: "health_consent_required" }, { status: 403 });
+      }
       const after = Number(url.searchParams.get("after") ?? "0");
       return Response.json({ events: this.listEvents(after) });
     }
@@ -181,7 +200,9 @@ export class CompanionStateDO extends DurableObject<Env> {
     try {
       const msg = JSON.parse(message) as { type: string; after?: number };
       if (msg.type === "replay") {
-        ws.send(JSON.stringify({ type: "replay", events: this.listEvents(msg.after ?? 0) }));
+        const state = await this.getState();
+        const events = state.settings.healthDataConsent ? this.listEvents(msg.after ?? 0) : [];
+        ws.send(JSON.stringify({ type: "replay", events }));
       }
       if (msg.type === "ping") {
         ws.send(JSON.stringify({ type: "pong" }));
@@ -195,6 +216,10 @@ export class CompanionStateDO extends DurableObject<Env> {
 
   async alarm() {
     const state = await this.getState();
+    if (!state.settings.healthDataConsent) {
+      await this.scheduleNextAlarm();
+      return;
+    }
     const now = Date.now();
     const planned =
       (await this.ctx.storage.get<{ kinds: NudgeKind[] | null; at: number }>("nextAlarm")) ?? null;
@@ -305,6 +330,9 @@ export class CompanionStateDO extends DurableObject<Env> {
   }
 
   private async deliverNudge(kind: NudgeKind, hour: number): Promise<boolean> {
+    const state = await this.getState();
+    if (!state.settings.healthDataConsent) return false;
+
     const msg = {
       type: "nudge_due" as const,
       kind,
@@ -537,7 +565,14 @@ export class CompanionStateDO extends DurableObject<Env> {
   }
 
   private broadcast(msg: unknown) {
-    const data = JSON.stringify(msg);
+    let out = msg;
+    if (out && typeof out === "object" && "state" in out) {
+      const m = out as { state?: StoredState };
+      if (m.state && !m.state.settings.healthDataConsent) {
+        out = { ...m, state: redactStateWithoutConsent(m.state) };
+      }
+    }
+    const data = JSON.stringify(out);
     for (const ws of this.ctx.getWebSockets()) {
       try {
         ws.send(data);

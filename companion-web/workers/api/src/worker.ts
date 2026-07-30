@@ -99,6 +99,9 @@ app.get("/api/state", async (c) => {
 app.get("/api/events", async (c) => {
   const user = await resolveUser(c);
   if (!user) return c.json({ error: "unauthorized" }, 401);
+  if (!(await userHasHealthConsent(c.env, user.id))) {
+    return c.json({ error: "health_consent_required" }, 403);
+  }
   const after = c.req.query("after") ?? "0";
   const stub = doStub(c.env, user.id);
   return stub.fetch(`https://do/events?after=${after}`);
