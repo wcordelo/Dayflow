@@ -46,6 +46,7 @@ export function startListening(opts: {
   onPartial: (t: string) => void;
   onFinal: (t: string) => void;
   onError: (e: string) => void;
+  onEnd?: () => void;
 }): { stop: () => void } | null {
   const Ctor = getSpeechRecognition();
   if (!Ctor) {
@@ -69,7 +70,7 @@ export function startListening(opts: {
     if (final) opts.onFinal(final.trim());
   };
   rec.onerror = (e) => opts.onError(e.error);
-  rec.onend = () => {};
+  rec.onend = () => opts.onEnd?.();
   void preferOnDevice(rec).then(() => {
     if (!stopped) rec.start();
   });

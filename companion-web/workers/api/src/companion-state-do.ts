@@ -477,7 +477,12 @@ export class CompanionStateDO extends DurableObject<Env> {
       }
     }
     if (kind === "overwhelm_on") {
-      state.settings.overwhelmUntil = nextDayBoundaryUnix(Date.now(), state.settings.ianaTimeZone);
+      const tzFromPayload = (payload as { ianaTimeZone?: string }).ianaTimeZone;
+      if (tzFromPayload && !state.settings.ianaTimeZone) {
+        state.settings.ianaTimeZone = tzFromPayload;
+      }
+      const tz = state.settings.ianaTimeZone ?? tzFromPayload ?? "UTC";
+      state.settings.overwhelmUntil = nextDayBoundaryUnix(Date.now(), tz);
       state.settings.engagement.missedNudges = 0;
       state.settings.engagement.lastNudgeAt = null;
     }

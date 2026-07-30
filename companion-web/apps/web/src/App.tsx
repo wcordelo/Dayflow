@@ -361,13 +361,18 @@ export function App() {
         listenRef.current = null;
         setListening(false);
       },
+      onEnd: () => {
+        listenRef.current = null;
+        setListening(false);
+      },
     });
     if (!handle) setListening(false);
     else listenRef.current = handle;
   }
 
   async function overwhelm() {
-    await mutate("overwhelm_on", {});
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    await mutate("overwhelm_on", tz ? { ianaTimeZone: tz } : {});
     speak("Rest mode on. I'll check back tomorrow.", tts);
   }
 

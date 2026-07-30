@@ -184,6 +184,16 @@ app.post("/api/ai/:engine", async (c) => {
     return c.json({ error: "unknown engine" }, 400);
   }
   const body = (await c.req.json()) as { message?: string; context?: unknown };
+  const stub = doStub(c.env, user.id);
+  const stateRes = await stub.fetch("https://do/state");
+  const serverState = stateRes.ok
+    ? ((await stateRes.json()) as {
+        dayKey: string;
+        priorities: Array<{ id: string; text: string; status: string }>;
+        yesterdayPriorities: Array<{ id: string; text: string; status: string }>;
+        dayLog: string[];
+      })
+    : null;
   const stored = await c.env.KV.get(`orkey:${user.id}`);
   let userKey = c.env.OPENROUTER_FALLBACK_KEY;
   if (stored) {
@@ -202,12 +212,18 @@ app.post("/api/ai/:engine", async (c) => {
   try {
     const logical = engine === "brief" ? "brief-fast" : "checkin-fast";
     const ctx = (body.context ?? {}) as Record<string, unknown>;
+    const yesterdayFromServer = serverState?.yesterdayPriorities.map((p) => ({
+      id: p.id,
+      text: p.text,
+      status_hint: p.status,
+    }));
+    const dayLogFromServer = serverState?.dayLog;
     const userPayload =
       engine === "checkin"
         ? {
             now_local: ctx.now_local ?? new Date().toISOString(),
-            day_key: ctx.day_key ?? ctx.dayKey ?? null,
-            yesterday_priorities: ctx.yesterday_priorities ?? [],
+            day_key: serverState?.dayKey ?? ctx.day_key ?? ctx.dayKey ?? null,
+            yesterday_priorities: yesterdayFromServer ?? ctx.yesterday_priorities ?? [],
             mode: ctx.mode ?? "soft_confirm_on_open",
             user_message: body.message ?? null,
             gratitude_anchor: ctx.gratitude_anchor ?? null,
@@ -215,10 +231,16 @@ app.post("/api/ai/:engine", async (c) => {
         : engine === "brief"
           ? {
               now_local: ctx.now_local ?? new Date().toISOString(),
-              day_key: ctx.day_key ?? ctx.dayKey ?? null,
-              priorities: ctx.priorities ?? [],
-              timeline_cards: ctx.timeline_cards ?? [],
-              day_log: ctx.day_log ?? ctx.dayLog ?? [],
+              day_key: serverState?.dayKey ?? ctx.day_key ?? ctx.dayKey ?? null,
+              priorities: serverState?.priorities ?? ctx.priorities ?? [],
+              timeline_cards: dayLogFromServer
+                ? dayLogFromServer.map((note, i) => ({
+                    id: `log-${i}`,
+                    text: note,
+                    kind: "day_log",
+                  }))
+                : (ctx.timeline_cards ?? []),
+              day_log: dayLogFromServer ?? ctx.day_log ?? ctx.dayLog ?? [],
               user_message: body.message ?? null,
             }
           : { message: body.message ?? null, context: ctx };
