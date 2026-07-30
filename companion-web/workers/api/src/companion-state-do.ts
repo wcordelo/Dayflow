@@ -387,6 +387,7 @@ export class CompanionStateDO extends DurableObject<Env> {
         state.dayLog = [];
         state.lastBrief = null;
         await this.ctx.storage.put("state", state);
+        this.broadcast({ type: "event", state });
       }
     }
     return state;
