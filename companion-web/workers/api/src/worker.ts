@@ -107,11 +107,26 @@ app.post("/api/mutate", async (c) => {
   return stub.fetch("https://do/mutate", { method: "POST", body: bodyText });
 });
 
+const USER_SETTINGS_KEYS = [
+  "checkinHour",
+  "reflectionHour",
+  "chimeFrequencyMin",
+  "eatReminderEnabled",
+  "eatReminderHour",
+  "quietHoursStart",
+  "quietHoursEnd",
+  "ttsEnabled",
+  "ianaTimeZone",
+] as const;
+
 app.post("/api/settings", async (c) => {
   const user = await resolveUser(c);
   if (!user) return c.json({ error: "unauthorized" }, 401);
   const body = (await c.req.json()) as Record<string, unknown>;
-  const { healthDataConsent: _consent, ...patch } = body;
+  const patch: Record<string, unknown> = {};
+  for (const key of USER_SETTINGS_KEYS) {
+    if (key in body) patch[key] = body[key];
+  }
   const stub = doStub(c.env, user.id);
   return stub.fetch("https://do/settings", {
     method: "POST",

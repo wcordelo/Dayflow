@@ -44,6 +44,30 @@ function isQuietHours(hour: number, start: number | null, end: number | null): b
   return hour >= start || hour < end;
 }
 
+const ALLOWED_SETTINGS_KEYS = new Set([
+  "checkinHour",
+  "reflectionHour",
+  "chimeFrequencyMin",
+  "eatReminderEnabled",
+  "eatReminderHour",
+  "quietHoursStart",
+  "quietHoursEnd",
+  "ttsEnabled",
+  "ianaTimeZone",
+  "healthDataConsent",
+  "openRouterKeySet",
+]);
+
+function pickAllowedSettings(patch: Partial<UserSettings>): Partial<UserSettings> {
+  const allowed: Partial<UserSettings> = {};
+  for (const key of ALLOWED_SETTINGS_KEYS) {
+    if (key in patch) {
+      (allowed as Record<string, unknown>)[key] = (patch as Record<string, unknown>)[key];
+    }
+  }
+  return allowed;
+}
+
 const DDL = [
   `CREATE TABLE IF NOT EXISTS events (
      id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -104,7 +128,7 @@ export class CompanionStateDO extends DurableObject<Env> {
       return Response.json({ event, state: await this.getState() });
     }
     if (url.pathname === "/settings" && request.method === "POST") {
-      const patch = (await request.json()) as Partial<UserSettings>;
+      const patch = pickAllowedSettings((await request.json()) as Partial<UserSettings>);
       const state = await this.getState();
       state.settings = { ...state.settings, ...patch };
       if (patch.ianaTimeZone) {
@@ -207,6 +231,7 @@ export class CompanionStateDO extends DurableObject<Env> {
         await this.scheduleNextAlarm();
         return;
       }
+      await this.ctx.storage.put("state", state);
     }
 
     let anyDelivered = false;
