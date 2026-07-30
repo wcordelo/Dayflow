@@ -11,6 +11,8 @@ export type EngagementState = {
   /** ISO week key YYYY-Www for rolling weekly check-in count */
   weekKey: string;
   checkinsThisWeek: number;
+  /** Distinct logical day last counted toward checkinsThisWeek */
+  lastCountedDayKey: string | null;
   /** Consecutive unanswered nudges — drives soft backoff */
   missedNudges: number;
   /** Unix seconds; skip push/nudge until this time when decaying */
@@ -48,6 +50,7 @@ export function isoWeekKey(d = new Date()): string {
 export const DEFAULT_ENGAGEMENT: EngagementState = {
   weekKey: isoWeekKey(),
   checkinsThisWeek: 0,
+  lastCountedDayKey: null,
   missedNudges: 0,
   backoffUntil: null,
   lastNudgeAt: null,

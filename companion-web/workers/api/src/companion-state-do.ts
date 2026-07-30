@@ -192,8 +192,11 @@ export class CompanionStateDO extends DurableObject<Env> {
       return;
     }
 
-    // Previous delivered nudge still unanswered → soft miss (not every timer tick).
-    if (state.settings.engagement.lastNudgeAt) {
+    // Ambient chimes never drive backoff — only morning/evening/eat.
+    const meaningful = kinds.filter((k) => k !== "chime");
+
+    // Previous delivered meaningful nudge still unanswered → soft miss.
+    if (meaningful.length && state.settings.engagement.lastNudgeAt) {
       state.settings.engagement.missedNudges += 1;
       if (state.settings.engagement.missedNudges >= 3) {
         state.settings.engagement.backoffUntil = Math.floor(now / 1000) + 24 * 3600;
@@ -207,12 +210,18 @@ export class CompanionStateDO extends DurableObject<Env> {
     }
 
     let anyDelivered = false;
+    let meaningfulDelivered = false;
     for (const kind of kinds) {
-      if (await this.deliverNudge(kind, hour)) anyDelivered = true;
+      if (await this.deliverNudge(kind, hour)) {
+        anyDelivered = true;
+        if (kind !== "chime") meaningfulDelivered = true;
+      }
     }
-    if (anyDelivered) {
+    if (meaningfulDelivered) {
       state.settings.engagement.lastNudgeAt = Math.floor(now / 1000);
       await this.ctx.storage.put("state", state);
+    } else if (anyDelivered) {
+      // chime-only: delivered but does not participate in miss/backoff tracking
     }
     await this.scheduleNextAlarm();
   }
@@ -267,11 +276,15 @@ export class CompanionStateDO extends DurableObject<Env> {
     if (state.settings.engagement.lastNudgeAt === undefined) {
       state.settings.engagement.lastNudgeAt = null;
     }
+    if (state.settings.engagement.lastCountedDayKey === undefined) {
+      state.settings.engagement.lastCountedDayKey = null;
+    }
     const week = isoWeekKey();
     if (state.settings.engagement.weekKey !== week) {
       state.settings.engagement = {
         weekKey: week,
         checkinsThisWeek: 0,
+        lastCountedDayKey: null,
         missedNudges: state.settings.engagement.missedNudges,
         backoffUntil: state.settings.engagement.backoffUntil,
         lastNudgeAt: state.settings.engagement.lastNudgeAt,
@@ -354,8 +367,13 @@ export class CompanionStateDO extends DurableObject<Env> {
       state.settings.engagement.missedNudges = 0;
       state.settings.engagement.backoffUntil = null;
       state.settings.engagement.lastNudgeAt = null;
-      if (kind === "checkin_completed" || kind === "chime_answered" || kind === "brief_generated") {
+      // Week metric = distinct days with engagement, not events per day.
+      if (
+        (kind === "checkin_completed" || kind === "chime_answered" || kind === "brief_generated") &&
+        state.settings.engagement.lastCountedDayKey !== state.dayKey
+      ) {
         state.settings.engagement.checkinsThisWeek += 1;
+        state.settings.engagement.lastCountedDayKey = state.dayKey;
       }
     }
     await this.ctx.storage.put("state", state);
