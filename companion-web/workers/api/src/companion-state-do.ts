@@ -375,6 +375,7 @@ export class CompanionStateDO extends DurableObject<Env> {
         await this.ctx.storage.put("state", state);
       } else if (state.dayKey !== today) {
         state.yesterdayPriorities = state.priorities.map((p) => ({ ...p }));
+        state.priorities = [];
         if (state.settings.engagement.lastNudgeAt) {
           state.settings.engagement.missedNudges += 1;
           if (state.settings.engagement.missedNudges >= 3) {
