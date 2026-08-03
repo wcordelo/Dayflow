@@ -51,6 +51,9 @@ if [[ ! -d "$PROJECT_PATH" ]]; then
   exit 1
 fi
 
+echo "Running Dayflow safety preflight before the release build."
+bash "${SCRIPT_DIR}/verify_dayflow_setup.sh"
+
 echo "[1/7] Building ${APP_NAME} (${SCHEME}|${CONFIG}) using project ${PROJECT_PATH} with code signing disabled…"
 xcodebuild \
   -project "${PROJECT_PATH}" \

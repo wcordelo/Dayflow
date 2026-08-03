@@ -12,7 +12,14 @@ extension GeminiDirectProvider {
       contents: contents,
       includeThinkingConfig: includeThinkingConfig
     )
-    var request = URLRequest(url: URL(string: dashboardStreamEndpoint + "?alt=sse&key=\(apiKey)")!)
+    guard let url = URL(string: dashboardStreamEndpoint + "?alt=sse") else {
+      throw NSError(
+        domain: "GeminiDashboardChat",
+        code: 901,
+        userInfo: [NSLocalizedDescriptionKey: "Invalid Gemini stream endpoint."]
+      )
+    }
+    var request = authorizedRequest(url: url)
     request.httpMethod = "POST"
     request.setValue("application/json", forHTTPHeaderField: "Content-Type")
     request.timeoutInterval = 180
@@ -101,7 +108,14 @@ extension GeminiDirectProvider {
       contents: contents,
       includeThinkingConfig: includeThinkingConfig
     )
-    var request = URLRequest(url: URL(string: dashboardGenerateEndpoint + "?key=\(apiKey)")!)
+    guard let url = URL(string: dashboardGenerateEndpoint) else {
+      throw NSError(
+        domain: "GeminiDashboardChat",
+        code: 901,
+        userInfo: [NSLocalizedDescriptionKey: "Invalid Gemini endpoint."]
+      )
+    }
+    var request = authorizedRequest(url: url)
     request.httpMethod = "POST"
     request.setValue("application/json", forHTTPHeaderField: "Content-Type")
     request.timeoutInterval = 180

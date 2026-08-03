@@ -1,0 +1,9 @@
+{
+  "event_id": "fixture-event-1",
+  "device_id": "fixture-mac",
+  "logical_clock": 42,
+  "schema_version": 1,
+  "key_version": 2,
+  "nonce": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+  "ciphertext": "Y2lwaGVydGV4dC1wYXlsb2Fk"
+}

@@ -1,11 +1,17 @@
-# Private beta readiness — end-to-end playbook
+# Archived private-beta readiness — end-to-end playbook
+
+> **Archived:** this playbook describes the retired Tauri companion prototype.
+> It is retained for migration review only. Do not use it to launch a separate
+> Dayflow product; use [`docs/multi-device/`](../multi-device/) for the current
+> native-client delivery plan.
 
 **Audience:** developers (Mac) + agents  
-**Goal:** Private beta on a real Mac — installable, shame-sensitive, no Terminal.  
-**Product code:** `adhd-companion/` (Tauri v2)  
+**Historical goal:** Private beta on a real Mac — installable, shame-sensitive, no Terminal.
+**Historical product code:** `adhd-companion/` (Tauri v2)
 **Binding decisions:** [IMPLEMENTATION_CONTRACT.md](./IMPLEMENTATION_CONTRACT.md) (v2.3)
 
-This is the single “what do I do next?” doc. Other docs are reference; this is the path.
+This document is retained for migration review. The current delivery path is
+the native-client plan under `docs/multi-device/`.
 
 **Privacy:** Do not commit end-user names, emails, API keys, or machine identifiers. Use generic “beta user” language in docs and issues.
 

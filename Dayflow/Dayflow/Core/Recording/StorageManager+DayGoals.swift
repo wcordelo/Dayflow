@@ -2,6 +2,24 @@ import Foundation
 import GRDB
 
 extension StorageManager {
+  /// Days with persisted goal plans, including days without timeline activity.
+  /// Migration must include these rows because a goal is user-authored state,
+  /// not a derived timeline record.
+  func fetchDayGoalDays(limit: Int = 100_000) -> [String] {
+    let boundedLimit = max(1, min(limit, 100_000))
+    return (try? timedRead("fetchDayGoalDays") { db in
+      try String.fetchAll(
+        db,
+        sql: """
+          SELECT day FROM day_goals
+          ORDER BY day DESC
+          LIMIT ?
+          """,
+        arguments: [boundedLimit]
+      )
+    }) ?? []
+  }
+
   func fetchDayGoalPlan(forDay day: String) -> DayGoalPlan? {
     fetchDayGoalPlan(whereSQL: "day = ?", arguments: [day], label: "fetchDayGoalPlan")
   }
@@ -93,6 +111,13 @@ extension StorageManager {
       try insertGoalCategories(plan.focusCategories, kind: .focus, day: plan.day, db: db)
       try insertGoalCategories(
         plan.distractionCategories, kind: .distraction, day: plan.day, db: db)
+    }
+    if let value = try? DayflowEventPayloadEncoder.dayGoalValue(plan) {
+      DayflowMacEventWriter.appendSetting(
+        key: "day_goal:\(plan.day)",
+        value: value,
+        storage: self
+      )
     }
   }
 

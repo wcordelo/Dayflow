@@ -197,12 +197,22 @@ final class StorageManager: StorageManaging, @unchecked Sendable {
   var checkpointTimer: DispatchSourceTimer?
   var backupTimer: DispatchSourceTimer?
 
-  init() {
-    UserDefaultsMigrator.migrateIfNeeded()
-    StoragePathMigrator.migrateIfNeeded()
+  /// Opens the normal Dayflow database, or an explicitly supplied directory
+  /// for isolated migration/replay validation.
+  ///
+  /// The custom-directory path deliberately skips user-data migrations,
+  /// background purge/checkpoint/backup work, and legacy file URL rewrites.
+  /// This keeps validation runs hermetic while preserving the production
+  /// startup path used by `StorageManager.shared`.
+  init(baseDirectory: URL? = nil, enableBackgroundMaintenance: Bool = true) {
+    let usesCustomDirectory = baseDirectory != nil
+    if usesCustomDirectory == false {
+      UserDefaultsMigrator.migrateIfNeeded()
+      StoragePathMigrator.migrateIfNeeded()
+    }
 
     let appSupport = fileMgr.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-    let baseDir = appSupport.appendingPathComponent("Dayflow", isDirectory: true)
+    let baseDir = baseDirectory ?? appSupport.appendingPathComponent("Dayflow", isDirectory: true)
     let recordingsDir = baseDir.appendingPathComponent("recordings", isDirectory: true)
     let backupDir = baseDir.appendingPathComponent("backups", isDirectory: true)
 
@@ -215,11 +225,13 @@ final class StorageManager: StorageManaging, @unchecked Sendable {
     backupsDir = backupDir
     dbURL = baseDir.appendingPathComponent("chunks.sqlite")
 
-    StorageManager.migrateDatabaseLocationIfNeeded(
-      fileManager: fileMgr,
-      legacyRecordingsDir: recordingsDir,
-      newDatabaseURL: dbURL
-    )
+    if usesCustomDirectory == false {
+      StorageManager.migrateDatabaseLocationIfNeeded(
+        fileManager: fileMgr,
+        legacyRecordingsDir: recordingsDir,
+        newDatabaseURL: dbURL
+      )
+    }
 
     // Configure database with WAL mode for better performance and safety
     var config = Configuration()
@@ -255,8 +267,13 @@ final class StorageManager: StorageManaging, @unchecked Sendable {
     performIntegrityCheck()
 
     migrate()
-    migrateLegacyChunkPathsIfNeeded()
-    truncateOversizedLLMCallBodiesIfNeeded()
+    ensureMultiDeviceSchema()
+    if usesCustomDirectory == false {
+      migrateLegacyChunkPathsIfNeeded()
+      truncateOversizedLLMCallBodiesIfNeeded()
+    }
+
+    guard enableBackgroundMaintenance else { return }
 
     // Run initial purge, then schedule hourly
     purgeIfNeeded()

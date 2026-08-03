@@ -1,0 +1,112 @@
+<Window
+    x:Class="Dayflow.Windows.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <ScrollViewer>
+    <StackPanel Padding="32" Spacing="16" MaxWidth="760">
+      <TextBlock Text="Dayflow" FontSize="32" />
+      <TextBlock Text="Your timeline stays on this device. Sync carries encrypted derived events only." TextWrapping="WrapWholeWords" />
+      <Border Padding="16" CornerRadius="12" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+        <StackPanel Spacing="8">
+          <TextBlock Text="Capture status" FontSize="18" />
+          <TextBlock x:Name="CaptureStatusText" Text="Not running" TextWrapping="WrapWholeWords" />
+          <TextBlock x:Name="CaptureDetailText" Text="Choose a window or display to begin." Opacity="0.75" TextWrapping="WrapWholeWords" />
+          <TextBlock x:Name="CapturePermissionText" Text="Capture permission: not_active" Opacity="0.75" TextWrapping="WrapWholeWords" />
+          <TextBlock x:Name="CaptureSessionText" Text="Capture session: idle" Opacity="0.75" TextWrapping="WrapWholeWords" />
+          <TextBlock x:Name="CapturePausedText" Text="Capture paused: not_paused" Opacity="0.75" TextWrapping="WrapWholeWords" />
+          <TextBlock x:Name="DerivedSyncText" Text="Derived sync: unknown" Opacity="0.75" TextWrapping="WrapWholeWords" />
+        </StackPanel>
+      </Border>
+      <StackPanel Orientation="Horizontal" Spacing="12">
+        <Button x:Name="StartCaptureButton" Content="Choose window or display" Click="StartCapture_Click" />
+        <Button x:Name="StopCaptureButton" Content="Stop capture" Click="StopCapture_Click" />
+      </StackPanel>
+      <Border Padding="16" CornerRadius="12" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+        <StackPanel Spacing="8">
+          <TextBlock Text="Local timeline, journal &amp; chat context" FontSize="18" />
+          <TextBlock x:Name="ProjectionSummaryText" TextWrapping="WrapWholeWords" />
+          <StackPanel x:Name="ChatContextPanel" Spacing="4" />
+          <TextBlock Text="Saved records" FontSize="16" />
+          <StackPanel x:Name="TimelineRecordsPanel" Spacing="6" />
+          <StackPanel x:Name="JournalRecordsPanel" Spacing="6" />
+          <StackPanel x:Name="PriorityRecordsPanel" Spacing="6" />
+          <StackPanel x:Name="ReflectionRecordsPanel" Spacing="6" />
+          <TextBox x:Name="JournalDayTextBox" Header="Logical day (YYYY-MM-DD)" />
+          <TextBox x:Name="JournalBodyTextBox" Header="Journal entry" AcceptsReturn="True" MinHeight="90" />
+          <Button Content="Save journal entry locally" Click="SaveJournal_Click" />
+          <TextBlock x:Name="JournalMessageText" TextWrapping="WrapWholeWords" Opacity="0.75" />
+          <TextBlock Text="Priorities &amp; reflections" FontSize="16" />
+          <TextBox x:Name="PriorityDayTextBox" Header="Priority logical day (YYYY-MM-DD)" />
+          <TextBox x:Name="PriorityTextTextBox" Header="What matters next?" />
+          <Button Content="Save priority locally" Click="SavePriority_Click" />
+          <TextBlock x:Name="PriorityMessageText" TextWrapping="WrapWholeWords" Opacity="0.75" />
+          <TextBox x:Name="ReflectionDayTextBox" Header="Reflection logical day (YYYY-MM-DD)" />
+          <TextBox x:Name="ReflectionBodyTextBox" Header="What did you learn?" AcceptsReturn="True" MinHeight="90" />
+          <Button Content="Save reflection locally" Click="SaveReflection_Click" />
+          <TextBlock x:Name="ReflectionMessageText" TextWrapping="WrapWholeWords" Opacity="0.75" />
+          <TextBlock Text="Shared Dayflow setting" FontSize="16" />
+          <TextBox x:Name="SharedSettingKeyTextBox" Header="Safe shared setting key" IsReadOnly="True" />
+          <TextBox x:Name="SharedSettingValueTextBox" Header="Value (true or false)" />
+          <Button Content="Save shared setting locally" Click="SaveSharedSetting_Click" />
+          <TextBlock x:Name="SharedSettingMessageText" TextWrapping="WrapWholeWords" Opacity="0.75" />
+        </StackPanel>
+      </Border>
+      <Border Padding="16" CornerRadius="12" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+        <StackPanel Spacing="8">
+          <TextBlock Text="Chat with your local Dayflow context" FontSize="18" />
+          <TextBox x:Name="ChatQuestionTextBox" Header="Ask a question" AcceptsReturn="True" MinHeight="90" />
+          <Button Content="Ask Dayflow" Click="AskChat_Click" />
+          <TextBlock x:Name="ChatMessageText" TextWrapping="WrapWholeWords" Opacity="0.75" />
+          <TextBlock x:Name="ChatAnswerText" TextWrapping="WrapWholeWords" />
+          <TextBlock Text="Only bounded local projection context is sent to your selected provider. Dayflow's sync relay is not an inference service." TextWrapping="WrapWholeWords" Opacity="0.75" />
+        </StackPanel>
+      </Border>
+      <Border Padding="16" CornerRadius="12" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+        <StackPanel Spacing="8">
+          <TextBlock Text="Account &amp; encrypted sync" FontSize="18" />
+          <TextBlock x:Name="SyncStatusText" Text="Not connected" TextWrapping="WrapWholeWords" />
+          <TextBlock x:Name="SyncHealthText" Text="Not synced yet" TextWrapping="WrapWholeWords" Opacity="0.75" />
+          <TextBox x:Name="AuthUrlTextBox" Header="Dayflow account service URL" />
+          <TextBox x:Name="EmailTextBox" Header="Email" />
+          <TextBox x:Name="VerificationCodeTextBox" Header="Email code" />
+          <StackPanel Orientation="Horizontal" Spacing="12">
+            <Button Content="Send sign-in code" Click="SendSignInCode_Click" />
+            <Button Content="Verify &amp; connect" Click="VerifySignInCode_Click" />
+          </StackPanel>
+          <TextBlock x:Name="AuthMessageText" TextWrapping="WrapWholeWords" Opacity="0.75" />
+          <TextBox x:Name="AccountIdTextBox" Header="Dayflow account ID" />
+          <TextBox x:Name="RelayUrlTextBox" Header="Sync relay URL" />
+          <TextBox x:Name="DisplayNameTextBox" Header="Device name" />
+          <StackPanel Orientation="Horizontal" Spacing="12">
+            <Button Content="Sync" Click="Sync_Click" />
+            <Button Content="Refresh devices" Click="RefreshDevices_Click" />
+            <Button x:Name="RotateEncryptionKeyButton" Content="Rotate key" Click="RotateEncryptionKey_Click" />
+            <Button Content="Sign out" Click="SignOut_Click" />
+          </StackPanel>
+          <TextBlock x:Name="RotationMessageText" TextWrapping="WrapWholeWords" Opacity="0.75" />
+          <StackPanel x:Name="DevicesPanel" Spacing="6" />
+          <PasswordBox x:Name="RecoveryPassphraseTextBox" Header="Recovery passphrase" />
+          <TextBox x:Name="RecoveryKitTextBox" Header="Recovery kit JSON" AcceptsReturn="True" MinHeight="120" TextWrapping="Wrap" />
+          <StackPanel Orientation="Horizontal" Spacing="12">
+            <Button Content="Prepare recovery kit" Click="ExportRecoveryKit_Click" />
+            <Button Content="Restore recovery kit" Click="RestoreRecoveryKit_Click" />
+          </StackPanel>
+          <TextBlock x:Name="RecoveryMessageText" TextWrapping="WrapWholeWords" Opacity="0.75" />
+          <TextBlock Text="The passphrase is never stored or synced. Keep it separate from the recovery kit." TextWrapping="WrapWholeWords" Opacity="0.75" />
+        </StackPanel>
+      </Border>
+      <Border Padding="16" CornerRadius="12" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+        <StackPanel Spacing="8">
+          <TextBlock Text="On-device AI" FontSize="18" />
+          <TextBox x:Name="ProviderIdTextBox" Header="Provider" />
+          <TextBox x:Name="ProviderEndpointTextBox" Header="Endpoint" />
+          <TextBox x:Name="ProviderModelTextBox" Header="Model" />
+          <PasswordBox x:Name="ProviderApiKeyPasswordBox" Header="API key (if required)" />
+          <Button Content="Save provider settings" Click="SaveProvider_Click" />
+          <TextBlock x:Name="ProviderMessageText" TextWrapping="WrapWholeWords" Opacity="0.75" />
+          <TextBlock Text="Provider routes and secrets stay in Windows DPAPI and are not synced." TextWrapping="WrapWholeWords" Opacity="0.75" />
+        </StackPanel>
+      </Border>
+    </StackPanel>
+  </ScrollViewer>
+</Window>

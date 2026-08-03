@@ -1,0 +1,62 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
+    <Platforms>x86;x64;ARM64</Platforms>
+    <RuntimeIdentifiers>win-x86;win-x64;win-arm64</RuntimeIdentifiers>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon />
+    <UseWinUI>true</UseWinUI>
+    <!-- Keep the unpackaged developer path as the default. The same WinUI
+         project can produce a package when DayflowPackaging=true; this keeps
+         packaging and runtime code on one native client instead of creating a
+         second shell. -->
+    <WindowsPackageType Condition="'$(DayflowPackaging)' == 'true'">MSIX</WindowsPackageType>
+    <WindowsPackageType Condition="'$(DayflowPackaging)' != 'true'">None</WindowsPackageType>
+    <EnableMsixTooling>true</EnableMsixTooling>
+    <PublishProfile Condition="'$(DayflowPackaging)' == 'true'">Properties\PublishProfiles\win10-$(Platform).pubxml</PublishProfile>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
+
+    <!-- The C# shell must ship the Rust C-ABI library for the selected
+         architecture. The Windows build script writes these files under
+         shared-core/dist/windows/<RID>. -->
+    <DayflowCoreRuntimeIdentifier Condition="'$(RuntimeIdentifier)' == 'win-x86'">win-x86</DayflowCoreRuntimeIdentifier>
+    <DayflowCoreRuntimeIdentifier Condition="'$(RuntimeIdentifier)' == 'win-x64'">win-x64</DayflowCoreRuntimeIdentifier>
+    <DayflowCoreRuntimeIdentifier Condition="'$(RuntimeIdentifier)' == 'win-arm64'">win-arm64</DayflowCoreRuntimeIdentifier>
+    <DayflowCoreRuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' And '$(PlatformTarget)' == 'x86'">win-x86</DayflowCoreRuntimeIdentifier>
+    <DayflowCoreRuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' And '$(PlatformTarget)' == 'x64'">win-x64</DayflowCoreRuntimeIdentifier>
+    <DayflowCoreRuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' And '$(PlatformTarget)' == 'ARM64'">win-arm64</DayflowCoreRuntimeIdentifier>
+    <DayflowCoreNativePath Condition="'$(DayflowCoreRuntimeIdentifier)' != ''">$(MSBuildThisFileDirectory)..\..\..\shared-core\dist\windows\$(DayflowCoreRuntimeIdentifier)\dayflow_core.dll</DayflowCoreNativePath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Reuse the first-party Dayflow artwork for the package identity. The
+         MSIX pipeline scales this 512px source for the manifest logo slots. -->
+    <Content Include="..\..\..\Dayflow\Dayflow\Assets.xcassets\AppIcon.appiconset\Export me (512px) (7).png">
+      <Link>Assets\DayflowLogo.png</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+    <None Include="$(DayflowCoreNativePath)" Condition="'$(DayflowCoreNativePath)' != '' And Exists('$(DayflowCoreNativePath)')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <TargetPath>dayflow_core.dll</TargetPath>
+    </None>
+  </ItemGroup>
+
+  <Target Name="RequireDayflowCoreNative" BeforeTargets="Build" Condition="'$(SkipDayflowCoreNativeCheck)' != 'true'">
+    <Error Condition="'$(DayflowCoreRuntimeIdentifier)' == ''" Text="Select a Windows architecture (for example -p:Platform=x64 -p:RuntimeIdentifier=win-x64) before building Dayflow.Windows." />
+    <Error Condition="'$(DayflowCoreRuntimeIdentifier)' != '' And !Exists('$(DayflowCoreNativePath)')" Text="Missing $(DayflowCoreNativePath). Run scripts/build_dayflow_core_windows.ps1 for $(DayflowCoreRuntimeIdentifier), then build again." />
+  </Target>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.3.1" />
+    <PackageReference Include="Microsoft.Graphics.Win2D" Version="1.4.0" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.8" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Win32.SystemEvents" Version="8.0.0" />
+  </ItemGroup>
+</Project>

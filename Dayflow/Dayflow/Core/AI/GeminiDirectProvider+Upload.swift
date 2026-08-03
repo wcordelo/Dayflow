@@ -127,7 +127,12 @@ extension GeminiDirectProvider {
   }
 
   func uploadSimple(data: Data, mimeType: String) async throws -> String {
-    var request = URLRequest(url: URL(string: fileEndpoint + "?key=\(apiKey)")!)
+    guard let url = URL(string: fileEndpoint) else {
+      throw NSError(
+        domain: "GeminiError", code: 6,
+        userInfo: [NSLocalizedDescriptionKey: "Invalid Gemini upload endpoint"])
+    }
+    var request = authorizedRequest(url: url)
     request.httpMethod = "POST"
     request.setValue(mimeType, forHTTPHeaderField: "Content-Type")
     request.httpBody = data
@@ -165,7 +170,12 @@ extension GeminiDirectProvider {
     body.append(try JSONEncoder().encode(metadata))
     body.append("\r\n--\(boundary)--\r\n".data(using: .utf8)!)
 
-    var request = URLRequest(url: URL(string: fileEndpoint + "?key=\(apiKey)")!)
+    guard let url = URL(string: fileEndpoint) else {
+      throw NSError(
+        domain: "GeminiError", code: 6,
+        userInfo: [NSLocalizedDescriptionKey: "Invalid Gemini upload endpoint"])
+    }
+    var request = authorizedRequest(url: url)
     request.httpMethod = "POST"
     request.setValue("resumable", forHTTPHeaderField: "X-Goog-Upload-Protocol")
     request.setValue("start", forHTTPHeaderField: "X-Goog-Upload-Command")
@@ -247,13 +257,14 @@ extension GeminiDirectProvider {
   }
 
   func getFileStatus(fileURI: String) async throws -> String {
-    guard let url = URL(string: fileURI + "?key=\(apiKey)") else {
+    guard let url = URL(string: fileURI) else {
       throw NSError(
         domain: "GeminiError", code: 6, userInfo: [NSLocalizedDescriptionKey: "Invalid file URI"])
     }
+    let request = authorizedRequest(url: url)
 
     let requestStart = Date()
-    let (data, response) = try await URLSession.shared.data(from: url)
+    let (data, response) = try await URLSession.shared.data(for: request)
     let requestDuration = Date().timeIntervalSince(requestStart)
     let statusCode = (response as? HTTPURLResponse)?.statusCode
     logCallDuration(operation: "file.status", duration: requestDuration, status: statusCode)

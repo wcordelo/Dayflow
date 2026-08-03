@@ -1,0 +1,238 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		DFA000030000000000000001 /* DayflowMobileAppEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFA000020000000000000001 /* DayflowMobileAppEntry.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		DFA000010000000000000001 /* DayflowMobile.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DayflowMobile.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		DFA000020000000000000001 /* DayflowMobileAppEntry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DayflowMobileAppEntry.swift; sourceTree = "<group>"; };
+		DFA000020000000000000002 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		DFA000020000000000000003 /* DayflowMobileApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = DayflowMobileApp.entitlements; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		DFA000040000000000000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		DFA000050000000000000001 = {
+			isa = PBXGroup;
+			children = (
+				DFA000060000000000000001 /* DayflowMobileApp */,
+				DFA000070000000000000001 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		DFA000060000000000000001 /* DayflowMobileApp */ = {
+			isa = PBXGroup;
+			children = (
+				DFA000020000000000000001 /* DayflowMobileAppEntry.swift */,
+				DFA000020000000000000002 /* Info.plist */,
+				DFA000020000000000000003 /* DayflowMobileApp.entitlements */,
+			);
+			path = DayflowMobileApp;
+			sourceTree = "<group>";
+		};
+		DFA000070000000000000001 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				DFA000010000000000000001 /* DayflowMobile.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		DFA000080000000000000001 /* DayflowMobileApp */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = DFA0000D0000000000000001 /* Build configuration list for PBXNativeTarget "DayflowMobileApp" */;
+			buildPhases = (
+				DFA000030000000000000002 /* Sources */,
+				DFA000040000000000000001 /* Frameworks */,
+				DFA000030000000000000003 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = DayflowMobileApp;
+			packageProductDependencies = (
+				DFA0000F0000000000000001 /* DayflowMobile */,
+			);
+			productName = DayflowMobileApp;
+			productReference = DFA000010000000000000001 /* DayflowMobile.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		DFA000090000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				LastSwiftUpdateCheck = 1600;
+				LastUpgradeCheck = 1600;
+			};
+			buildConfigurationList = DFA0000C0000000000000001 /* Build configuration list for PBXProject "DayflowMobile" */;
+			compatibilityVersion = "Xcode 16.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = DFA000050000000000000001;
+			packageReferences = (
+				DFA0000E0000000000000001 /* XCLocalSwiftPackageReference "DayflowMobilePackage" */,
+			);
+			productRefGroup = DFA000070000000000000001 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				DFA000080000000000000001 /* DayflowMobileApp */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		DFA000030000000000000003 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		DFA000030000000000000002 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				DFA000030000000000000001 /* DayflowMobileAppEntry.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		DFA0000A0000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = DayflowMobileApp/Info.plist;
+				CODE_SIGN_ENTITLEMENTS = DayflowMobileApp/DayflowMobileApp.entitlements;
+				APS_ENVIRONMENT = development;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = app.dayflow.mobile;
+				PRODUCT_MODULE_NAME = DayflowMobileApp;
+				PRODUCT_NAME = DayflowMobile;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		DFA0000A0000000000000002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_PREVIEWS = NO;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = DayflowMobileApp/Info.plist;
+				CODE_SIGN_ENTITLEMENTS = DayflowMobileApp/DayflowMobileApp.entitlements;
+				APS_ENVIRONMENT = production;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = app.dayflow.mobile;
+				PRODUCT_MODULE_NAME = DayflowMobileApp;
+				PRODUCT_NAME = DayflowMobile;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		DFA0000B0000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		DFA0000B0000000000000002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		DFA0000C0000000000000001 /* Build configuration list for PBXProject "DayflowMobile" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				DFA0000B0000000000000001 /* Debug */,
+				DFA0000B0000000000000002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		DFA0000D0000000000000001 /* Build configuration list for PBXNativeTarget "DayflowMobileApp" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				DFA0000A0000000000000001 /* Debug */,
+				DFA0000A0000000000000002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		DFA0000E0000000000000001 /* XCLocalSwiftPackageReference "DayflowMobilePackage" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = .;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		DFA0000F0000000000000001 /* DayflowMobile */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = DFA0000E0000000000000001 /* XCLocalSwiftPackageReference "DayflowMobilePackage" */;
+			productName = DayflowMobile;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = DFA000090000000000000001 /* Project object */;
+}

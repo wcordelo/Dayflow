@@ -1,0 +1,320 @@
+name: Dayflow native clients
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "shared-core/**"
+      - "Dayflow/**"
+      - "clients/android/**"
+      - "clients/ios/**"
+      - "clients/generated/**"
+      - "clients/windows/**"
+      - "scripts/build_dayflow_core_android.sh"
+      - "scripts/build_dayflow_core_xcframework.sh"
+      - "scripts/build_dayflow_core_ios_xcframework.sh"
+      - "scripts/build_dayflow_core_windows.ps1"
+      - "scripts/verify_dayflow_real_database_migration.sh"
+      - "scripts/verify_dayflow_setup.sh"
+      - "scripts/verify_dayflow_test_scheme.sh"
+      - "scripts/verify_dayflow_native_contracts.sh"
+      - "scripts/release_dmg.sh"
+      - ".github/workflows/dayflow-native-clients.yml"
+  pull_request:
+    paths:
+      - "shared-core/**"
+      - "Dayflow/**"
+      - "clients/android/**"
+      - "clients/ios/**"
+      - "clients/generated/**"
+      - "clients/windows/**"
+      - "scripts/build_dayflow_core_android.sh"
+      - "scripts/build_dayflow_core_xcframework.sh"
+      - "scripts/build_dayflow_core_ios_xcframework.sh"
+      - "scripts/build_dayflow_core_windows.ps1"
+      - "scripts/verify_dayflow_real_database_migration.sh"
+      - "scripts/verify_dayflow_setup.sh"
+      - "scripts/verify_dayflow_test_scheme.sh"
+      - "scripts/verify_dayflow_native_contracts.sh"
+      - "scripts/release_dmg.sh"
+      - ".github/workflows/dayflow-native-clients.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  contracts:
+    name: Native source contract check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Verify generated bindings and native seams
+        run: bash scripts/verify_dayflow_native_contracts.sh
+
+  macos:
+    name: macOS app and non-interactive tests
+    runs-on: macos-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Run safe macOS setup preflight
+        run: bash scripts/verify_dayflow_setup.sh
+
+      - name: Install Rust targets
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin,aarch64-apple-ios,aarch64-apple-ios-sim,x86_64-apple-ios
+
+      - name: Generate Rust bindings
+        run: bash scripts/generate_dayflow_core_bindings.sh
+
+      - name: Build Rust XCFramework
+        run: bash scripts/build_dayflow_core_xcframework.sh
+
+      - name: Verify the normal scheme has no UI automation target
+        run: bash scripts/verify_dayflow_test_scheme.sh
+
+      - name: Run Mac unit tests without code signing or UI automation
+        run: >-
+          xcodebuild -quiet
+          -project Dayflow/Dayflow.xcodeproj
+          -scheme Dayflow
+          -destination 'platform=macOS'
+          CODE_SIGNING_ALLOWED=NO
+          CODE_SIGN_IDENTITY=''
+          test
+
+      - name: Build unsigned macOS DMG artifact
+        run: |
+          archive_path="$RUNNER_TEMP/Dayflow.xcarchive"
+          stage_path="$RUNNER_TEMP/DayflowDMG"
+          xcodebuild -quiet \
+            -project Dayflow/Dayflow.xcodeproj \
+            -scheme Dayflow \
+            -configuration Release \
+            -destination 'generic/platform=macOS' \
+            -archivePath "$archive_path" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGN_IDENTITY='' \
+            archive
+          test -d "$archive_path/Products/Applications/Dayflow.app"
+          mkdir -p "$stage_path"
+          ditto "$archive_path/Products/Applications/Dayflow.app" "$stage_path/Dayflow.app"
+          ln -s /Applications "$stage_path/Applications"
+          hdiutil create \
+            -volname Dayflow \
+            -srcfolder "$stage_path" \
+            -ov \
+            -format UDZO \
+            "$RUNNER_TEMP/Dayflow.dmg"
+
+      - name: Upload macOS DMG artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dayflow-macos-dmg
+          path: ${{ runner.temp }}/Dayflow.dmg
+          if-no-files-found: error
+
+  ios:
+    name: iOS source and binding build
+    runs-on: macos-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Run safe macOS setup preflight
+        run: bash scripts/verify_dayflow_setup.sh
+
+      - name: Install Rust targets
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin,aarch64-apple-ios,aarch64-apple-ios-sim,x86_64-apple-ios
+
+      - name: Generate bindings
+        run: bash scripts/generate_dayflow_core_bindings.sh
+
+      - name: Build iOS XCFramework
+        run: bash scripts/build_dayflow_core_ios_xcframework.sh
+
+      - name: Test host package
+        run: swift test --package-path clients/ios
+
+      - name: Build device package
+        run: |
+          sdk_path="$(xcrun --sdk iphoneos --show-sdk-path)"
+          swift build --package-path clients/ios --sdk "$sdk_path" --triple arm64-apple-ios17.0
+
+      - name: Build simulator package
+        run: |
+          sdk_path="$(xcrun --sdk iphonesimulator --show-sdk-path)"
+          swift build --package-path clients/ios --sdk "$sdk_path" --triple arm64-apple-ios17.0-simulator
+
+      - name: Build the iOS application target
+        run: >-
+          xcodebuild -quiet
+          -project clients/ios/DayflowMobile.xcodeproj
+          -scheme DayflowMobileApp
+          -destination 'generic/platform=iOS'
+          CODE_SIGNING_ALLOWED=NO
+          CODE_SIGN_IDENTITY=''
+          build
+
+      - name: Build the iOS simulator application target
+        run: >-
+          xcodebuild -quiet
+          -project clients/ios/DayflowMobile.xcodeproj
+          -scheme DayflowMobileApp
+          -destination 'generic/platform=iOS Simulator'
+          CODE_SIGNING_ALLOWED=NO
+          CODE_SIGN_IDENTITY=''
+          build
+
+      - name: Build unsigned iOS archive artifact
+        run: |
+          archive_path="$RUNNER_TEMP/DayflowMobile.xcarchive"
+          xcodebuild -quiet \
+            -project clients/ios/DayflowMobile.xcodeproj \
+            -scheme DayflowMobileApp \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$archive_path" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGN_IDENTITY='' \
+            archive
+          test -d "$archive_path/Products/Applications/DayflowMobile.app"
+          ditto -c -k --sequesterRsrc --keepParent \
+            "$archive_path" \
+            "$RUNNER_TEMP/DayflowMobile-unsigned.xcarchive.zip"
+
+      - name: Upload iOS archive artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dayflow-ios-unsigned-archive
+          path: ${{ runner.temp }}/DayflowMobile-unsigned.xcarchive.zip
+          if-no-files-found: error
+
+  android:
+    name: Android and ChromeOS source build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Install Android SDK and NDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android build dependencies
+        shell: bash
+        run: |
+          sdkmanager "platform-tools" "platforms;android-37" "build-tools;37.0.0" "ndk;27.2.12479018"
+
+      - name: Install Rust Android targets
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
+
+      - name: Build Rust Android libraries
+        run: |
+          export ANDROID_NDK_HOME="${ANDROID_SDK_ROOT}/ndk/27.2.12479018"
+          bash scripts/build_dayflow_core_android.sh
+
+      - name: Install Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          # AGP 9.3.x requires Gradle 9.5.0 or newer.
+          gradle-version: "9.5.0"
+
+      - name: Assemble and test Android client
+        run: gradle :app:assembleDebug :app:bundleRelease :app:testDebugUnitTest
+        working-directory: clients/android
+
+      - name: Verify Android Play artifact
+        shell: bash
+        run: test -f app/build/outputs/bundle/release/app-release.aab
+        working-directory: clients/android
+
+      - name: Upload Android Play artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dayflow-android-release
+          path: clients/android/app/build/outputs/bundle/release/app-release.aab
+          if-no-files-found: error
+
+      - name: Run Android UniFFI binding smoke test
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 36
+          arch: x86_64
+          profile: Pixel_2
+          script: gradle :app:connectedDebugAndroidTest
+          working-directory: clients/android
+
+  windows:
+    name: Windows WinUI and C ABI build
+    runs-on: windows-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Install Rust x64 target
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Build Rust Windows library
+        shell: pwsh
+        run: ./scripts/build_dayflow_core_windows.ps1 -Architecture x64
+
+      - name: Restore Windows client
+        run: dotnet restore clients/windows/Dayflow.Windows/Dayflow.Windows.csproj
+
+      - name: Restore Windows C-ABI smoke tests
+        run: dotnet restore clients/windows/Dayflow.Windows.Tests/Dayflow.Windows.Tests.csproj
+
+      - name: Build Windows client
+        run: >-
+          dotnet build clients/windows/Dayflow.Windows/Dayflow.Windows.csproj
+          -c Debug -p:Platform=x64 -p:RuntimeIdentifier=win-x64 --no-restore
+
+      - name: Run Windows C-ABI smoke tests
+        run: >-
+          dotnet test clients/windows/Dayflow.Windows.Tests/Dayflow.Windows.Tests.csproj
+          -c Debug -p:Platform=x64 -p:RuntimeIdentifier=win-x64 --no-restore
+
+      - name: Build unsigned Windows MSIX package
+        shell: pwsh
+        run: >-
+          dotnet build clients/windows/Dayflow.Windows/Dayflow.Windows.csproj
+          -c Release -p:Platform=x64 -p:RuntimeIdentifier=win-x64
+          -p:DayflowPackaging=true -p:GenerateAppxPackageOnBuild=true
+          -p:AppxPackageSigningEnabled=false
+          -p:AppxPackageDir="$env:RUNNER_TEMP\DayflowPackages\" --no-restore
+
+      - name: Verify Windows package artifact
+        shell: pwsh
+        run: |
+          $packages = Get-ChildItem -Path "$env:RUNNER_TEMP\DayflowPackages" -Recurse -Filter *.msix
+          if ($packages.Count -lt 1) {
+            throw "The Windows packaging build did not produce an .msix artifact."
+          }
+
+      - name: Upload Windows MSIX artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dayflow-windows-msix
+          path: ${{ runner.temp }}/DayflowPackages/**/*.msix
+          if-no-files-found: error

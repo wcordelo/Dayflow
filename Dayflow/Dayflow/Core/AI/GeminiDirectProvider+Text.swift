@@ -27,9 +27,12 @@ extension GeminiDirectProvider {
       do {
         print("🔄 generateText attempt \(attempt + 1)/\(maxRetries)")
         let activeModel = modelState.current
-        let urlWithKey = endpointForModel(activeModel) + "?key=\(apiKey)"
-
-        var request = URLRequest(url: URL(string: urlWithKey)!)
+        guard let url = URL(string: endpointForModel(activeModel)) else {
+          throw NSError(
+            domain: "GeminiError", code: 8,
+            userInfo: [NSLocalizedDescriptionKey: "Invalid Gemini model endpoint"])
+        }
+        var request = authorizedRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.timeoutInterval = 120

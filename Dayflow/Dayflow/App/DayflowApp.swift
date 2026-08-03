@@ -324,6 +324,7 @@ extension Notification.Name {
     "showScreenRecordingPermissionNotice")
   static let openProvidersSettings = Notification.Name("openProvidersSettings")
   static let openAccountSettings = Notification.Name("openAccountSettings")
+  static let dayflowSharedCapturePauseChanged = Notification.Name("dayflowSharedCapturePauseChanged")
 }
 
 @MainActor

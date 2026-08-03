@@ -133,16 +133,33 @@ extension StorageManager {
   }
 
   func saveDailyStandup(forDay standupDay: String, payloadJSON: String) {
-    try? timedWrite("saveDailyStandup") { db in
-      try db.execute(
-        sql: """
-              INSERT INTO daily_standup_entries (standup_day, payload_json, updated_at)
-              VALUES (?, ?, CURRENT_TIMESTAMP)
-              ON CONFLICT(standup_day) DO UPDATE SET
-                  payload_json = excluded.payload_json,
-                  updated_at = CURRENT_TIMESTAMP
-          """, arguments: [standupDay, payloadJSON])
+    let previousPayloadJSON = fetchDailyStandup(forDay: standupDay)?.payloadJSON
+    do {
+      try timedWrite("saveDailyStandup") { db in
+        try db.execute(
+          sql: """
+                INSERT INTO daily_standup_entries (standup_day, payload_json, updated_at)
+                VALUES (?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(standup_day) DO UPDATE SET
+                    payload_json = excluded.payload_json,
+                    updated_at = CURRENT_TIMESTAMP
+            """, arguments: [standupDay, payloadJSON])
+      }
+    } catch {
+      print("⚠️ [StorageManager] Unable to save daily standup: \(error)")
+      return
     }
+    DayflowMacEventWriter.appendSetting(
+      key: "daily_standup:\(standupDay)",
+      value: payloadJSON,
+      storage: self
+    )
+    DayflowMacEventWriter.appendPriorities(
+      day: standupDay,
+      previousPayloadJSON: previousPayloadJSON,
+      payloadJSON: payloadJSON,
+      storage: self
+    )
   }
 
 }

@@ -37,6 +37,15 @@ final class GeminiDirectProvider {
       "https://generativelanguage.googleapis.com/v1beta/models/\(model.rawValue):generateContent"
   }
 
+  /// Keep the provider secret in the request header. Query strings can be
+  /// copied into proxy logs, crash reports, browser history, and redirect
+  /// metadata even when the request body is never persisted.
+  func authorizedRequest(url: URL) -> URLRequest {
+    var request = URLRequest(url: url)
+    request.setValue(apiKey, forHTTPHeaderField: "x-goog-api-key")
+    return request
+  }
+
   init(apiKey: String, preference: GeminiModelPreference = .default) {
     self.apiKey = apiKey.components(separatedBy: .whitespacesAndNewlines).joined()
     self.modelPreference = preference

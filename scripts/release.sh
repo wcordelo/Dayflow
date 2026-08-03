@@ -121,6 +121,9 @@ if [[ $DRY_RUN -eq 1 ]]; then
   echo "Dry run. No changes made."; exit 0
 fi
 
+echo "Running Dayflow safety preflight before changing release metadata."
+bash "$SCRIPT_DIR/verify_dayflow_setup.sh"
+
 echo "[1/8] Bumping versions in project and Info.plist…"
 # First, update the Xcode project so UI reflects the correct version.
 if [[ -f "$PBP" ]]; then

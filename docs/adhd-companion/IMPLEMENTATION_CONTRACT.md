@@ -1,6 +1,12 @@
 # ADHD Companion — Implementation Contract (v2.3)
 
-**Status:** binding for M0–M6 product build. Supersedes informal plan text where they conflict.  
+> **Archived:** this contract describes the retired Tauri companion direction.
+> It remains a historical source and privacy-behavior reference. Do not
+> continue M1–M6 as separate product development. The current implementation
+> contract is [`docs/multi-device/`](../multi-device/), with native Dayflow
+> clients and an opaque encrypted relay.
+
+**Status:** historical reference for the retired M0–M6 prototype.
 **Canonical research narrative:** [Notion — Research & Build Plan](https://app.notion.com/p/3a63444800948027849ec9b757ed4177)  
 **Date:** 2026-07-24 (v2.3 — hard gate removed; continuous end-to-end implementation)  
 **Scope:** Mac v1 only. iPhone out of scope until a sync story exists.  
@@ -502,6 +508,10 @@ Contract is **sufficient to build the product end-to-end**. M0 validates native 
 
 ## 8. Immediate next actions
 
-1. **Agents:** Continue M1–M6 in `adhd-companion/` (Tauri product + engine). Use stubs for macOS-only APIs on Linux CI.  
-2. **Developer (Mac):** Run §5 against the product binary (or optional scratch spike); write `M0_RESULTS.md`; swap capture/panel backends if needed.  
-3. **Interim for private beta (if needed before companion is installable):** stock Dayflow + one Focusmate-style session (pledged-time hypothesis) — novelty decays by week 4; that’s the real evaluation window per Barkley framing.
+1. **Do not continue M1–M6 as separate product work.** Keep this source tree
+   available only for migration and behavior-reference analysis.
+2. **Validate the unified native clients** using the gates in
+   [`docs/multi-device/DELIVERY_GATES.md`](../multi-device/DELIVERY_GATES.md).
+3. **If historical capture behavior must be compared,** run the old M0 checks
+   only as an isolated experiment; do not ship or connect the prototype to the
+   Dayflow account or relay.

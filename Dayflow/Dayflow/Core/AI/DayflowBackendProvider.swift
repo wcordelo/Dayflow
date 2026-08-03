@@ -174,9 +174,19 @@ final class DayflowBackendProvider {
     #endif
   }
 
-  private func resolvedEndpointString() -> String {
-    endpoint.trimmingCharacters(in: .whitespacesAndNewlines)
-      .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+  private func validatedEndpointURL() -> URL? {
+    DayflowBackendConfiguration.validatedEndpointURL(from: endpoint)
+  }
+
+  private func invalidEndpointError() -> NSError {
+    NSError(
+      domain: "DayflowBackend",
+      code: -10,
+      userInfo: [
+        NSLocalizedDescriptionKey:
+          "Invalid Dayflow backend endpoint. Use HTTPS, or HTTP only for localhost development."
+      ]
+    )
   }
 
   private static func date(from isoString: String) -> Date? {
@@ -265,10 +275,10 @@ final class DayflowBackendProvider {
   {
     let requestId = UUID().uuidString
     let startedAt = Date()
-    let normalizedEndpoint = resolvedEndpointString()
+    let baseURL = validatedEndpointURL()
 
     let endpointHost: String = {
-      guard let parsed = URL(string: normalizedEndpoint), let host = parsed.host, !host.isEmpty
+      guard let host = baseURL?.host, !host.isEmpty
       else {
         return "invalid_host"
       }
@@ -291,13 +301,8 @@ final class DayflowBackendProvider {
     var responseByteCount = 0
 
     do {
-      guard let url = URL(string: "\(normalizedEndpoint)/v1/daily") else {
-        throw NSError(
-          domain: "DayflowBackend",
-          code: -10,
-          userInfo: [NSLocalizedDescriptionKey: "Invalid Dayflow backend endpoint: \(endpoint)"]
-        )
-      }
+      guard let baseURL else { throw invalidEndpointError() }
+      let url = baseURL.appendingPathComponent("v1/daily")
 
       var urlRequest = URLRequest(url: url)
       urlRequest.httpMethod = "POST"
@@ -311,7 +316,7 @@ final class DayflowBackendProvider {
       )
 
       let requestByteCount = urlRequest.httpBody?.count ?? 0
-      let (data, response) = try await URLSession.shared.data(for: urlRequest)
+      let (data, response) = try await DayflowBackendHTTP.noRedirectSession.data(for: urlRequest)
       responseByteCount = data.count
 
       guard let httpResponse = response as? HTTPURLResponse else {
@@ -401,14 +406,8 @@ final class DayflowBackendProvider {
   {
     let requestId = UUID().uuidString
     let startedAt = Date()
-    let normalizedEndpoint = resolvedEndpointString()
-    guard let url = URL(string: "\(normalizedEndpoint)/v1/dayflow/transcribe") else {
-      throw NSError(
-        domain: "DayflowBackend",
-        code: -30,
-        userInfo: [NSLocalizedDescriptionKey: "Invalid Dayflow backend endpoint: \(endpoint)"]
-      )
-    }
+    guard let baseURL = validatedEndpointURL() else { throw invalidEndpointError() }
+    let url = baseURL.appendingPathComponent("v1/dayflow/transcribe")
 
     let sortedScreenshots = screenshots.sorted { $0.capturedAt < $1.capturedAt }
     let screenshotPayloads = sortedScreenshots.compactMap {
@@ -435,7 +434,7 @@ final class DayflowBackendProvider {
     )
 
     let endpointHost: String = {
-      guard let parsed = URL(string: normalizedEndpoint), let host = parsed.host, !host.isEmpty
+      guard let host = baseURL.host, !host.isEmpty
       else {
         return "invalid_host"
       }
@@ -469,7 +468,7 @@ final class DayflowBackendProvider {
       urlRequest.httpBody = try JSONEncoder().encode(payload)
 
       let requestByteCount = urlRequest.httpBody?.count ?? 0
-      let (data, response) = try await URLSession.shared.data(for: urlRequest)
+      let (data, response) = try await DayflowBackendHTTP.noRedirectSession.data(for: urlRequest)
       responseByteCount = data.count
 
       guard let httpResponse = response as? HTTPURLResponse else {
@@ -577,14 +576,8 @@ final class DayflowBackendProvider {
   ) async throws -> (cards: [ActivityCardData], log: LLMCall) {
     let requestId = UUID().uuidString
     let startedAt = Date()
-    let normalizedEndpoint = resolvedEndpointString()
-    guard let url = URL(string: "\(normalizedEndpoint)/v1/dayflow/generate-cards") else {
-      throw NSError(
-        domain: "DayflowBackend",
-        code: -20,
-        userInfo: [NSLocalizedDescriptionKey: "Invalid Dayflow backend endpoint: \(endpoint)"]
-      )
-    }
+    guard let baseURL = validatedEndpointURL() else { throw invalidEndpointError() }
+    let url = baseURL.appendingPathComponent("v1/dayflow/generate-cards")
 
     let payload = DayflowGenerateCardsRequest(
       observations: observations.map(DayflowObservationPayload.init),
@@ -596,7 +589,7 @@ final class DayflowBackendProvider {
     )
 
     let endpointHost: String = {
-      guard let parsed = URL(string: normalizedEndpoint), let host = parsed.host, !host.isEmpty
+      guard let host = baseURL.host, !host.isEmpty
       else {
         return "invalid_host"
       }
@@ -630,7 +623,7 @@ final class DayflowBackendProvider {
       urlRequest.httpBody = try JSONEncoder().encode(payload)
 
       let requestByteCount = urlRequest.httpBody?.count ?? 0
-      let (data, response) = try await URLSession.shared.data(for: urlRequest)
+      let (data, response) = try await DayflowBackendHTTP.noRedirectSession.data(for: urlRequest)
       responseByteCount = data.count
 
       guard let httpResponse = response as? HTTPURLResponse else {

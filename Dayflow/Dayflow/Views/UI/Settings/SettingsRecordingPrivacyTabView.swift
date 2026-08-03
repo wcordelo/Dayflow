@@ -16,6 +16,10 @@ struct SettingsRecordingPrivacyTabView: View {
       subtitle: "Choose apps Dayflow should hide from screenshots."
     ) {
       VStack(alignment: .leading, spacing: 18) {
+        captureSourceControls
+        Rectangle()
+          .fill(SettingsStyle.divider)
+          .frame(height: 1)
         searchField
         installedAppsGrid
           .frame(maxHeight: .infinity, alignment: .top)
@@ -26,6 +30,77 @@ struct SettingsRecordingPrivacyTabView: View {
     .frame(maxHeight: .infinity, alignment: .topLeading)
     .onAppear {
       viewModel.handleOnAppear()
+    }
+  }
+
+  private var captureSourceControls: some View {
+    VStack(alignment: .leading, spacing: 12) {
+      HStack(alignment: .firstTextBaseline) {
+        VStack(alignment: .leading, spacing: 4) {
+          Text("Capture source")
+            .font(.custom("Figtree", size: 13))
+            .fontWeight(.semibold)
+            .foregroundColor(SettingsStyle.text)
+          Text("Choose the display, application, or window Dayflow samples locally.")
+            .font(.custom("Figtree", size: 12))
+            .foregroundColor(SettingsStyle.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+
+        Spacer(minLength: 12)
+
+        Picker(
+          "Capture source",
+          selection: Binding(
+            get: { viewModel.selectedCaptureSource.id },
+            set: { selectedID in
+              guard let option = viewModel.captureOptions.first(where: { $0.id == selectedID })
+              else { return }
+              viewModel.selectCaptureSource(option)
+            }
+          )
+        ) {
+          ForEach(viewModel.captureOptions) { option in
+            Text(option.label)
+              .tag(option.id)
+          }
+        }
+        .pickerStyle(.menu)
+        .frame(maxWidth: 240, alignment: .trailing)
+      }
+
+      HStack(spacing: 10) {
+        Image(systemName: "lock.shield")
+          .font(.system(size: 12, weight: .semibold))
+          .foregroundColor(SettingsStyle.ink)
+
+        if let selectedOption = viewModel.captureOptions.first(
+          where: { $0.id == viewModel.selectedCaptureSource.id }
+        ) {
+          Text(selectedOption.detail ?? "Selected source is resolved when recording starts.")
+            .font(.custom("Figtree", size: 12))
+            .foregroundColor(SettingsStyle.secondary)
+        } else {
+          Text("Selected source is currently unavailable. Choose another source.")
+            .font(.custom("Figtree", size: 12))
+            .foregroundColor(SettingsStyle.destructive)
+        }
+
+        Spacer(minLength: 8)
+
+        SettingsSecondaryButton(
+          title: viewModel.isLoadingCaptureOptions ? "Loading..." : "Refresh",
+          systemImage: "arrow.clockwise",
+          isDisabled: viewModel.isLoadingCaptureOptions,
+          action: viewModel.loadCaptureOptions
+        )
+      }
+
+      if let error = viewModel.captureSourceError {
+        Text(error)
+          .font(.custom("Figtree", size: 12))
+          .foregroundColor(SettingsStyle.destructive)
+      }
     }
   }
 

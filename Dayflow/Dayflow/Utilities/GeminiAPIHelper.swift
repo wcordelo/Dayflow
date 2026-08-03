@@ -45,11 +45,12 @@ class GeminiAPIHelper {
 
     let url = URL(
       string:
-        "https://generativelanguage.googleapis.com/v1beta/models/\(testModel.rawValue):generateContent?key=\(cleanedAPIKey)"
+        "https://generativelanguage.googleapis.com/v1beta/models/\(testModel.rawValue):generateContent"
     )!
     var request = URLRequest(url: url)
     request.httpMethod = "POST"
     request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    request.setValue(cleanedAPIKey, forHTTPHeaderField: "x-goog-api-key")
 
     // Simple test request
     let requestBody: [String: Any] = [

@@ -1,3 +1,16 @@
 DAYFLOW_BACKEND_URL =
+// Set this in a local/release xcconfig only after the relay auth binding and
+// deployment have passed the encrypted two-device acceptance gate.
+DAYFLOW_SYNC_RELAY_URL =
+INFOPLIST_KEY_DayflowSyncRelayURL = $(DAYFLOW_SYNC_RELAY_URL)
+
+// The shared Rust core is built by scripts/build_dayflow_core_xcframework.sh.
+// Keep this path local and explicit so a clean checkout fails at the packaging
+// gate instead of silently falling back to a second Swift implementation.
+DAYFLOW_CORE_SLICE = $(SRCROOT)/../shared-core/dist/DayflowCore.xcframework/macos-arm64_x86_64
+HEADER_SEARCH_PATHS = $(inherited) "$(DAYFLOW_CORE_SLICE)/Headers"
+SWIFT_INCLUDE_PATHS = $(inherited) "$(DAYFLOW_CORE_SLICE)/Headers"
+LIBRARY_SEARCH_PATHS = $(inherited) "$(DAYFLOW_CORE_SLICE)"
+OTHER_LDFLAGS = $(inherited) -ldayflow_core_universal
 
 #include? "LocalSecrets.xcconfig"

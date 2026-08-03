@@ -5,6 +5,7 @@ import Sentry
 extension StorageManager {
   func deleteTimelineCards(forDay day: String) -> [String] {
     var videoPaths: [String] = []
+    var deletedRecordIds: [Int64] = []
 
     guard let dayDate = dateFormatter.date(from: day) else {
       return []
@@ -30,27 +31,41 @@ extension StorageManager {
     let startTs = Int(dayStart.timeIntervalSince1970)
     let endTs = Int(dayEnd.timeIntervalSince1970)
 
-    try? timedWrite("deleteTimelineCards(forDay:\(day))") { db in
-      // First fetch all video paths before soft deletion
-      let rows = try Row.fetchAll(
-        db,
-        sql: """
-              SELECT video_summary_url FROM timeline_cards
-              WHERE start_ts >= ? AND start_ts < ?
-                AND video_summary_url IS NOT NULL
-                AND is_deleted = 0
-          """, arguments: [startTs, endTs])
+    do {
+      try timedWrite("deleteTimelineCards(forDay:\(day))") { db in
+        // Fetch every active ID before soft deletion. Tombstones represent the
+        // aggregate, not just the optional local media attached to it.
+        let rows = try Row.fetchAll(
+          db,
+          sql: """
+                SELECT id, video_summary_url FROM timeline_cards
+                WHERE start_ts >= ? AND start_ts < ?
+                  AND is_deleted = 0
+            """, arguments: [startTs, endTs])
 
-      videoPaths = rows.compactMap { $0["video_summary_url"] as? String }
+        deletedRecordIds = rows.compactMap { $0["id"] as? Int64 }
+        videoPaths = rows.compactMap { $0["video_summary_url"] as? String }
 
-      // Soft delete the timeline cards by setting is_deleted = 1
-      try db.execute(
-        sql: """
-              UPDATE timeline_cards
-              SET is_deleted = 1
-              WHERE start_ts >= ? AND start_ts < ?
-                AND is_deleted = 0
-          """, arguments: [startTs, endTs])
+        // Soft delete the timeline cards by setting is_deleted = 1
+        try db.execute(
+          sql: """
+                UPDATE timeline_cards
+                SET is_deleted = 1
+                WHERE start_ts >= ? AND start_ts < ?
+                  AND is_deleted = 0
+            """, arguments: [startTs, endTs])
+      }
+    } catch {
+      deletedRecordIds = []
+      videoPaths = []
+      print("deleteTimelineCards(forDay:\(day)) failed: \(error)")
+    }
+
+    for recordID in deletedRecordIds {
+      DayflowMacEventWriter.appendTombstone(
+        targetID: "mac:v1:timeline_card:\(recordID)",
+        storage: self
+      )
     }
 
     return videoPaths
@@ -59,23 +74,25 @@ extension StorageManager {
   func deleteTimelineCards(forBatchIds batchIds: [Int64]) -> [String] {
     guard !batchIds.isEmpty else { return [] }
     var videoPaths: [String] = []
+    var deletedRecordIds: [Int64] = []
     let placeholders = Array(repeating: "?", count: batchIds.count).joined(separator: ",")
 
     do {
       try timedWrite("deleteTimelineCards(forBatchIds:\(batchIds.count))") { db in
-        // Fetch video paths for active records only
+        // Fetch every active ID before soft deletion. Tombstones represent the
+        // aggregate, not just the optional local media attached to it.
         let rows = try Row.fetchAll(
           db,
           sql: """
-                SELECT video_summary_url
+                SELECT id, video_summary_url
                 FROM timeline_cards
                 WHERE batch_id IN (\(placeholders))
-                  AND video_summary_url IS NOT NULL
                   AND is_deleted = 0
             """,
           arguments: StatementArguments(batchIds)
         )
 
+        deletedRecordIds = rows.compactMap { $0["id"] as? Int64 }
         videoPaths = rows.compactMap { $0["video_summary_url"] as? String }
 
         // Soft delete the records
@@ -90,7 +107,16 @@ extension StorageManager {
         )
       }
     } catch {
+      deletedRecordIds = []
+      videoPaths = []
       print("deleteTimelineCards(forBatchIds:) failed: \(error)")
+    }
+
+    for recordID in deletedRecordIds {
+      DayflowMacEventWriter.appendTombstone(
+        targetID: "mac:v1:timeline_card:\(recordID)",
+        storage: self
+      )
     }
 
     return videoPaths
