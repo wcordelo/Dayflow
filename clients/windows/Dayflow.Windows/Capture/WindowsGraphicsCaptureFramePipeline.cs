@@ -42,10 +42,8 @@ public sealed class WindowsGraphicsCaptureFramePipeline : IWindowsFramePipeline,
             _framePool.FrameArrived += FramePool_FrameArrived;
 
             _session = _framePool.CreateCaptureSession(item);
-            // Keep the system's visible capture indication enabled. A borderless
-            // session requires a separate user-consent flow and is not part of
-            // Dayflow's default privacy promise.
-            _session.IsBorderRequired = true;
+            // The Windows API keeps its visible capture indication enabled by
+            // default. Dayflow does not opt into the borderless capture mode.
             _session.StartCapture();
         }
         return Task.CompletedTask;
@@ -139,7 +137,7 @@ public sealed class WindowsGraphicsCaptureFramePipeline : IWindowsFramePipeline,
                     _device,
                     DirectXPixelFormat.B8G8R8A8UIntNormalized,
                     BufferCount,
-                    new Windows.Graphics.SizeInt32
+                    new global::Windows.Graphics.SizeInt32
                     {
                         Width = contentSize.Width,
                         Height = contentSize.Height,

@@ -37,7 +37,7 @@ public sealed class DayflowWindowsAppModel
         _keyStore = keyStore ?? new DayflowWindowsKeyStore();
         _providerStore = new DayflowAIProviderStore(_keyStore);
         _syncSession = syncSession ?? new DayflowWindowsSyncSession(_keyStore);
-        _pushNotifications = new DayflowWindowsPushNotifications(SyncForPushWakeAsync);
+        _pushNotifications = new DayflowWindowsPushNotifications(() => SyncForPushWakeAsync());
         LoadSession();
         if (string.IsNullOrWhiteSpace(AccountId)) PrepareLocalWorkspace();
     }

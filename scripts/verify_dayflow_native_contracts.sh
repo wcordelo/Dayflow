@@ -187,7 +187,7 @@ require_text 'import DayflowCoreBindings' "$repo_root/clients/ios/Sources/Dayflo
 require_text 'func canonicalDeviceRequest' "$repo_root/clients/ios/Sources/DayflowMobile/DayflowCoreBridge.swift"
 require_text 'core.canonicalDeviceRequest' "$repo_root/clients/ios/Sources/DayflowMobile/DayflowMobileSync.swift"
 
-require_text 'compileSdk = 37' "$repo_root/clients/android/app/build.gradle.kts"
+require_text 'compileSdk = 36' "$repo_root/clients/android/app/build.gradle.kts"
 require_text 'java.srcDir("../../generated/kotlin")' "$repo_root/clients/android/app/build.gradle.kts"
 require_text 'kotlin.srcDir("../../generated/kotlin")' "$repo_root/clients/android/app/build.gradle.kts"
 require_text 'jniLibs.srcDir("../../generated/android/jniLibs")' "$repo_root/clients/android/app/build.gradle.kts"
@@ -500,7 +500,7 @@ require_text 'build_dayflow_core_ios_xcframework.sh' "$repo_root/.github/workflo
 require_text 'build_dayflow_core_android.sh' "$repo_root/.github/workflows/dayflow-native-clients.yml"
 require_text 'build_dayflow_core_windows.ps1' "$repo_root/.github/workflows/dayflow-native-clients.yml"
 require_text 'gradle-version: "9.5.0"' "$repo_root/.github/workflows/dayflow-native-clients.yml"
-require_text 'sdkmanager "platform-tools" "platforms;android-37"' "$repo_root/.github/workflows/dayflow-native-clients.yml"
+require_text 'sdkmanager "platform-tools" "platforms;android-36"' "$repo_root/.github/workflows/dayflow-native-clients.yml"
 forbid_text 'platforms;android-37.0' "$repo_root/.github/workflows/dayflow-native-clients.yml"
 require_text ':app:bundleRelease' "$repo_root/.github/workflows/dayflow-native-clients.yml"
 require_text 'dayflow-android-release' "$repo_root/.github/workflows/dayflow-native-clients.yml"

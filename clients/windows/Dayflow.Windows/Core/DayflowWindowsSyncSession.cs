@@ -681,15 +681,15 @@ public sealed class DayflowWindowsSyncSession
 
     private bool IsRecoveryRestorePending(string accountId) =>
         string.Equals(
-            _keyStore.LoadText(accountId, RecoveryRestorePendingKey),
+            _keyStore.LoadText(accountId, RecoveryRestorePendingKey(accountId)),
             "true",
             StringComparison.Ordinal);
 
     private void MarkRecoveryRestorePending(string accountId) =>
-        _keyStore.StoreText(accountId, RecoveryRestorePendingKey, "true");
+        _keyStore.StoreText(accountId, RecoveryRestorePendingKey(accountId), "true");
 
     private void ClearRecoveryRestorePending(string accountId) =>
-        _keyStore.Delete(accountId, RecoveryRestorePendingKey);
+        _keyStore.Delete(accountId, RecoveryRestorePendingKey(accountId));
 
     private (byte[] PrivateKey, byte[] PublicKey) LoadOrCreateMaterial(
         string accountId,

@@ -304,8 +304,8 @@ public sealed class WindowsCaptureAdapter
 
     private void OnFrameArrived(WindowsCaptureSample sample)
     {
-        if (_lastForegroundContextAt is not { } last
-            || sample.CapturedAt - last >= TimeSpan.FromSeconds(1))
+        if (_lastForegroundContextAt is not { } lastForegroundAt
+            || sample.CapturedAt - lastForegroundAt >= TimeSpan.FromSeconds(1))
         {
             var foreground = WindowsForegroundContext.Read();
             _applicationId = foreground.ApplicationId ?? _applicationId;
@@ -339,8 +339,8 @@ public sealed class WindowsCaptureAdapter
             return;
         }
         var now = sample.CapturedAt;
-        if (_lastDerivedSampleAt is { } last
-            && now - last < TimeSpan.FromMinutes(1))
+        if (_lastDerivedSampleAt is { } lastDerivedAt
+            && now - lastDerivedAt < TimeSpan.FromMinutes(1))
         {
             return;
         }

@@ -67,7 +67,7 @@ the pinned Gradle tooling, or the commands above require `gradle` on `PATH`.
 Console validation, and a physical-device/Chromebook install remain release
 gates.
 The local validation environment used JDK 21, Gradle 9.6.1, Android SDK
-Platform 37.0, Build Tools 37.0.0, and NDK 27.2.12479018. The manifest points at a network
+Platform 36, Build Tools 36.0.0, and NDK 27.2.12479018. The manifest points at a network
 security configuration that denies cleartext by default and names only
 loopback hosts as exceptions for local model development; account, relay, and
 provider validation reject non-loopback HTTP as a second guard.
