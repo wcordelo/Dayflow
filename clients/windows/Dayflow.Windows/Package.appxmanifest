@@ -2,7 +2,8 @@
 <Package
   xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
   xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
-  IgnorableNamespaces="uap">
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedCapabilities"
+  IgnorableNamespaces="uap rescap">
   <Identity
     Name="Dayflow.Windows"
     Publisher="CN=Dayflow"
@@ -35,6 +36,7 @@
     </Application>
   </Applications>
   <Capabilities>
+    <rescap:Capability Name="runFullTrust" />
     <Capability Name="internetClient" />
   </Capabilities>
 </Package>

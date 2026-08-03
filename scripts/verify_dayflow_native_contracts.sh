@@ -126,6 +126,7 @@ require_file "$repo_root/clients/windows/Dayflow.Windows/Properties/PublishProfi
 require_file "$repo_root/clients/windows/Dayflow.Windows/Properties/PublishProfiles/win10-x86.pubxml"
 require_file "$repo_root/clients/windows/Dayflow.Windows/Properties/PublishProfiles/win10-ARM64.pubxml"
 require_file "$repo_root/clients/windows/Dayflow.Windows.Tests/Dayflow.Windows.Tests.csproj"
+require_text 'runFullTrust' "$repo_root/clients/windows/Dayflow.Windows/Package.appxmanifest"
 require_file "$repo_root/clients/windows/Dayflow.Windows.Tests/DayflowCoreInteropTests.cs"
 require_file "$repo_root/clients/windows/Dayflow.Windows/Core/DayflowWindowsPushNotifications.cs"
 require_file "$repo_root/clients/windows/Dayflow.Windows/Core/DayflowWindowsCapturePolicy.cs"
