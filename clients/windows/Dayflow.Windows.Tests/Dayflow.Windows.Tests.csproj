@@ -26,11 +26,14 @@
     <Compile Include="..\Dayflow.Windows\Core\DayflowAIProviderConfiguration.cs" Link="Core\DayflowAIProviderConfiguration.cs" />
     <Compile Include="..\Dayflow.Windows\Core\DayflowLocalSyncStore.cs" Link="Core\DayflowLocalSyncStore.cs" />
     <Compile Include="..\Dayflow.Windows\Core\DayflowWindowsPushNotifications.cs" Link="Core\DayflowWindowsPushNotifications.cs" />
+    <Compile Include="..\Dayflow.Windows\Capture\WindowsCaptureAdapter.cs" Link="Capture\WindowsCaptureAdapter.cs" />
+    <Compile Include="..\Dayflow.Windows\Capture\WindowsForegroundContext.cs" Link="Capture\WindowsForegroundContext.cs" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.13.0" />
     <PackageReference Include="MSTest.TestAdapter" Version="3.6.4" />
     <PackageReference Include="MSTest.TestFramework" Version="3.6.4" />
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.8" />
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.3.1" />
   </ItemGroup>
 
   <Target Name="RequireDayflowCoreNative" BeforeTargets="Build">
