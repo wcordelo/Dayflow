@@ -5,6 +5,26 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 normal_scheme="${repo_root}/Dayflow/Dayflow.xcodeproj/xcshareddata/xcschemes/Dayflow.xcscheme"
 project_file="${repo_root}/Dayflow/Dayflow.xcodeproj/project.pbxproj"
 
+contains_regex() {
+  local pattern="$1"
+  shift
+  if command -v rg >/dev/null 2>&1; then
+    rg -q "$pattern" "$@"
+  else
+    local path
+    for path in "$@"; do
+      if [[ -d "$path" ]]; then
+        if grep -REq -- "$pattern" "$path" 2>/dev/null; then
+          return 0
+        fi
+      elif grep -Eq -- "$pattern" "$path" 2>/dev/null; then
+        return 0
+      fi
+    done
+    return 1
+  fi
+}
+
 for required_file in "${normal_scheme}" "${project_file}"; do
   if [[ ! -f "${required_file}" ]]; then
     echo "Missing Xcode automation guard input: ${required_file}" >&2
@@ -26,13 +46,13 @@ if [[ -d "${ui_test_tree}" ]]; then
   fi
 fi
 
-if rg -q "DayflowUITests|DayflowUITests\.xctest|com\.apple\.product-type\.bundle\.ui-testing|runsForEachTargetApplicationUIConfiguration|XCTApplicationLaunchMetric|XCUIApplication|XCUIElement|XCUIScreen|testLaunchPerformance" \
+if contains_regex "DayflowUITests|DayflowUITests\.xctest|com\.apple\.product-type\.bundle\.ui-testing|runsForEachTargetApplicationUIConfiguration|XCTApplicationLaunchMetric|XCUIApplication|XCUIElement|XCUIScreen|testLaunchPerformance" \
   "${project_file}" "${normal_scheme}" "${repo_root}/Dayflow" "${repo_root}/DayflowTests" 2>/dev/null; then
   echo "The Dayflow project must not contain a UI-automation target or repeated launch test." >&2
   exit 4
 fi
 
-if ! rg -q "DayflowTests\.xctest" "${normal_scheme}"; then
+if ! contains_regex "DayflowTests\.xctest" "${normal_scheme}"; then
   echo "The normal Dayflow scheme must retain the non-interactive unit-test target." >&2
   exit 5
 fi

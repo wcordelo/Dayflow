@@ -3,6 +3,18 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
+contains_fixed_text() {
+  local needle="$1"
+  local path="$2"
+  if command -v rg >/dev/null 2>&1; then
+    rg --fixed-strings --quiet -- "$needle" "$path"
+  elif [[ -d "$path" ]]; then
+    grep -RFq -- "$needle" "$path"
+  else
+    grep -Fq -- "$needle" "$path"
+  fi
+}
+
 require_file() {
   local path="$1"
   if [[ ! -f "$path" ]]; then
@@ -14,7 +26,7 @@ require_file() {
 require_text() {
   local needle="$1"
   local path="$2"
-  if ! rg --fixed-strings --quiet -- "$needle" "$path"; then
+  if ! contains_fixed_text "$needle" "$path"; then
     echo "Product-surface boundary is missing '$needle' in $path" >&2
     exit 1
   fi
@@ -180,7 +192,25 @@ reject_native_product_reference() {
     rg_args+=(--glob "$glob")
   done
 
-  match="$(rg "${rg_args[@]}" -- "$needle" "${native_product_paths[@]}" 2>/dev/null || true)"
+  if command -v rg >/dev/null 2>&1; then
+    match="$(rg "${rg_args[@]}" -- "$needle" "${native_product_paths[@]}" 2>/dev/null || true)"
+  else
+    match=""
+    while IFS= read -r -d '' candidate; do
+      candidate_match="$(grep -nHF -- "$needle" "$candidate" 2>/dev/null || true)"
+      if [[ -n "$candidate_match" ]]; then
+        match+="${candidate_match}"$'\n'
+      fi
+    done < <(
+      find "${native_product_paths[@]}" \
+        \( -path '*/.git' -o -path '*/.gradle' -o -path '*/build' -o -path '*/DerivedData' \) -prune -o \
+        -type f \
+        \( -name '*.swift' -o -name '*.m' -o -name '*.mm' -o -name '*.h' -o -name '*.kt' \
+          -o -name '*.kts' -o -name '*.java' -o -name '*.cs' -o -name '*.xaml' -o -name '*.rs' \
+          -o -name '*.toml' -o -name '*.json' -o -name '*.xml' -o -name '*.plist' \) \
+        -print0
+    )
+  fi
   if [[ -n "$match" ]]; then
     echo "Legacy companion reference '$needle' found in native product code:" >&2
     echo "$match" >&2
@@ -213,8 +243,13 @@ forbidden_relay_source_terms=(
   'DEV_AUTH_BYPASS'
 )
 for needle in "${forbidden_relay_source_terms[@]}"; do
-  match="$(rg --fixed-strings --line-number -- "$needle" \
-    "$repo_root/companion-web/workers/api/src" 2>/dev/null || true)"
+  if command -v rg >/dev/null 2>&1; then
+    match="$(rg --fixed-strings --line-number -- "$needle" \
+      "$repo_root/companion-web/workers/api/src" 2>/dev/null || true)"
+  else
+    match="$(grep -R -F -n -- "$needle" \
+      "$repo_root/companion-web/workers/api/src" 2>/dev/null || true)"
+  fi
   if [[ -n "$match" ]]; then
     echo "Retired companion relay term '$needle' found in deployable relay source:" >&2
     echo "$match" >&2

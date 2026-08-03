@@ -3,6 +3,18 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
+contains_fixed_text() {
+  local needle="$1"
+  local path="$2"
+  if command -v rg >/dev/null 2>&1; then
+    rg --fixed-strings --quiet -- "$needle" "$path"
+  elif [[ -d "$path" ]]; then
+    grep -RFq -- "$needle" "$path"
+  else
+    grep -Fq -- "$needle" "$path"
+  fi
+}
+
 require_file() {
   local path="$1"
   if [[ ! -f "$path" ]]; then
@@ -22,7 +34,7 @@ require_directory() {
 require_text() {
   local needle="$1"
   local path="$2"
-  if ! rg --fixed-strings --quiet -- "$needle" "$path"; then
+  if ! contains_fixed_text "$needle" "$path"; then
     echo "Native contract is missing '$needle' in $path" >&2
     exit 1
   fi
@@ -31,7 +43,7 @@ require_text() {
 forbid_text() {
   local needle="$1"
   local path="$2"
-  if rg --fixed-strings --quiet -- "$needle" "$path"; then
+  if contains_fixed_text "$needle" "$path"; then
     echo "Native contract must not contain '$needle' in $path" >&2
     exit 1
   fi
@@ -99,7 +111,11 @@ require_before 'verify_dayflow_setup.sh' 'xcodebuild' "$repo_root/scripts/build_
 require_before 'verify_dayflow_setup.sh' 'xcodebuild' "$repo_root/scripts/build_dayflow_core_ios_xcframework.sh"
 require_before 'verify_dayflow_setup.sh' 'xcodebuild' "$repo_root/scripts/release_dmg.sh"
 require_before 'verify_dayflow_setup.sh' 'git add' "$repo_root/scripts/release.sh"
-workflow_preflight_count="$(rg -F 'run: bash scripts/verify_dayflow_setup.sh' "$repo_root/.github/workflows/dayflow-native-clients.yml" | wc -l | tr -d ' ')"
+if command -v rg >/dev/null 2>&1; then
+  workflow_preflight_count="$(rg -F 'run: bash scripts/verify_dayflow_setup.sh' "$repo_root/.github/workflows/dayflow-native-clients.yml" | wc -l | tr -d ' ')"
+else
+  workflow_preflight_count="$(grep -F -c 'run: bash scripts/verify_dayflow_setup.sh' "$repo_root/.github/workflows/dayflow-native-clients.yml" || true)"
+fi
 if [[ "$workflow_preflight_count" != "2" ]]; then
   echo "Native workflow must run the safe setup preflight in both Apple jobs (found ${workflow_preflight_count})." >&2
   exit 1
