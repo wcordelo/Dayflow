@@ -254,7 +254,7 @@ jobs:
         with:
           api-level: 36
           arch: x86_64
-          profile: Pixel_2
+          profile: pixel_2
           script: gradle :app:connectedDebugAndroidTest
           working-directory: clients/android
 
