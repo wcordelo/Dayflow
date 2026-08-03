@@ -19,9 +19,14 @@ public static class DayflowWindowsSharedSettingContract
         var day = key[prefix.Length..];
         if (day.Length != 10
             || day[4] != '-'
-            || day[7] != '-'
-            || day.Any(character => !char.IsAsciiDigit(character)))
+            || day[7] != '-')
             return false;
+
+        for (var index = 0; index < day.Length; index++)
+        {
+            if (index is 4 or 7) continue;
+            if (!char.IsAsciiDigit(day[index])) return false;
+        }
 
         return DateOnly.TryParseExact(
                 day,

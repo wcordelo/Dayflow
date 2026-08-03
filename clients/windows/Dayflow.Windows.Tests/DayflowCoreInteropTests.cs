@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Dayflow.Windows.Capture;
 using Dayflow.Windows.Core;
+using Microsoft.Data.Sqlite;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Dayflow.Windows.Tests;
@@ -219,30 +220,33 @@ public sealed class DayflowCoreInteropTests
         var databasePath = Path.Combine(Path.GetTempPath(), $"dayflow-remote-clock-{Guid.NewGuid():N}.sqlite");
         try
         {
-            using var store = new DayflowLocalSyncStore(databasePath);
-            var remote = new DayflowEventEnvelope(
-                "remote-clock-17",
-                "ios-clock-test",
-                17,
-                DayflowEventEnvelope.CurrentSchemaVersion,
-                1,
-                new string('A', 32),
-                new string('A', 24));
-
-            Assert.AreEqual(1, store.Merge(new[] { remote }));
-            Assert.AreEqual(18UL, store.NextLogicalClock());
-
-            var later = remote with
+            using (var store = new DayflowLocalSyncStore(databasePath))
             {
-                EventId = "remote-clock-25",
-                DeviceId = "android-clock-test",
-                LogicalClock = 25,
-            };
-            Assert.AreEqual(1, store.Merge(new[] { later }));
-            Assert.AreEqual(26UL, store.NextLogicalClock());
+                var remote = new DayflowEventEnvelope(
+                    "remote-clock-17",
+                    "ios-clock-test",
+                    17,
+                    DayflowEventEnvelope.CurrentSchemaVersion,
+                    1,
+                    new string('A', 32),
+                    new string('A', 24));
+
+                Assert.AreEqual(1, store.Merge(new[] { remote }));
+                Assert.AreEqual(18UL, store.NextLogicalClock());
+
+                var later = remote with
+                {
+                    EventId = "remote-clock-25",
+                    DeviceId = "android-clock-test",
+                    LogicalClock = 25,
+                };
+                Assert.AreEqual(1, store.Merge(new[] { later }));
+                Assert.AreEqual(26UL, store.NextLogicalClock());
+            }
         }
         finally
         {
+            SqliteConnection.ClearAllPools();
             File.Delete(databasePath);
         }
     }
@@ -277,6 +281,7 @@ public sealed class DayflowCoreInteropTests
         }
         finally
         {
+            SqliteConnection.ClearAllPools();
             File.Delete(databasePath);
         }
     }
