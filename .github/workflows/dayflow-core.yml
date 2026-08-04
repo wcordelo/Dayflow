@@ -1,0 +1,74 @@
+name: Dayflow shared core
+
+on:
+  push:
+    paths:
+      - "shared-core/**"
+      - "clients/generated/**"
+      - "clients/ios/Sources/DayflowCoreBindings/**"
+      - "docs/multi-device/fixtures/event-envelope-v1.json"
+      - "scripts/generate_dayflow_core_bindings.sh"
+      - ".github/workflows/dayflow-core.yml"
+  pull_request:
+    paths:
+      - "shared-core/**"
+      - "clients/generated/**"
+      - "clients/ios/Sources/DayflowCoreBindings/**"
+      - "docs/multi-device/fixtures/event-envelope-v1.json"
+      - "scripts/generate_dayflow_core_bindings.sh"
+      - ".github/workflows/dayflow-core.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  rust-core:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: shared-core
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Cargo artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: shared-core
+
+      - name: Check formatting
+        run: cargo fmt --check
+
+      - name: Run shared-core tests
+        run: cargo test --features uniffi-bindings
+
+      - name: Run Clippy
+        run: cargo clippy --features uniffi-bindings --all-targets -- -D warnings
+
+      - name: Build release shared library
+        run: cargo build --release --features uniffi-bindings
+
+      - name: Generate Swift and Kotlin binding smoke artifacts
+        run: |
+          mkdir -p "$RUNNER_TEMP/dayflow-bindings/swift" "$RUNNER_TEMP/dayflow-bindings/kotlin"
+          cargo run --release --features uniffi-bindings --bin uniffi-bindgen -- \
+            generate --library target/release/libdayflow_core.so \
+            --language swift --out-dir "$RUNNER_TEMP/dayflow-bindings/swift"
+          cargo run --release --features uniffi-bindings --bin uniffi-bindgen -- \
+            generate --library target/release/libdayflow_core.so \
+            --language kotlin --out-dir "$RUNNER_TEMP/dayflow-bindings/kotlin"
+          test -s "$RUNNER_TEMP/dayflow-bindings/swift/DayflowCore.swift"
+          test -s "$RUNNER_TEMP/dayflow-bindings/kotlin/app/dayflow/core/dayflow_core.kt"
+
+      - name: Verify checked-in bindings are current
+        working-directory: .
+        run: |
+          bash scripts/generate_dayflow_core_bindings.sh
+          git diff --exit-code -- \
+            clients/generated \
+            clients/ios/Sources/DayflowCoreBindings

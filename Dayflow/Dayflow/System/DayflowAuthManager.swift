@@ -2,6 +2,35 @@ import AppKit
 import Foundation
 import Security
 
+private final class DayflowAuthNoRedirectDelegate: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+  func urlSession(
+    _ session: URLSession,
+    task: URLSessionTask,
+    willPerformHTTPRedirection response: HTTPURLResponse,
+    newRequest request: URLRequest,
+    completionHandler: @escaping (URLRequest?) -> Void
+  ) {
+    // Never forward a bearer token or account payload across a changed host or
+    // scheme. A redirect is an authentication failure, not a follow-up hop.
+    completionHandler(nil)
+  }
+}
+
+private enum DayflowAuthHTTP {
+  static let noRedirectSession: URLSession = {
+    let configuration = URLSessionConfiguration.ephemeral
+    configuration.httpShouldSetCookies = false
+    configuration.httpCookieStorage = nil
+    configuration.urlCache = nil
+    configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+    return URLSession(
+      configuration: configuration,
+      delegate: DayflowAuthNoRedirectDelegate(),
+      delegateQueue: nil
+    )
+  }()
+}
+
 struct DayflowAuthUser: Codable, Equatable {
   let id: String
   let email: String
@@ -270,10 +299,10 @@ final class DayflowAuthManager: ObservableObject {
   @Published private(set) var referralSummary: DayflowReferralSummary?
   @Published private(set) var pendingReferralCode: String?
 
-  private let endpoint: String?
+  private let endpoint: URL?
 
   private init() {
-    self.endpoint = DayflowBackendConfiguration.endpoint()
+    self.endpoint = DayflowBackendConfiguration.validatedEndpointURL()
     self.pendingReferralCode = UserDefaults.standard.string(forKey: Self.pendingReferralCodeKey)
   }
 
@@ -367,6 +396,7 @@ final class DayflowAuthManager: ObservableObject {
       }
 
       user = response.user
+      DayflowAccountIdentity.setCurrentID(response.user.id)
       entitlements = response.entitlements
       pendingEmail = nil
       codeExpiresAt = nil
@@ -421,6 +451,7 @@ final class DayflowAuthManager: ObservableObject {
 
       let response: MeResponse = try await send(request)
       user = response.user
+      DayflowAccountIdentity.setCurrentID(response.user.id)
       entitlements = response.entitlements
       referralSummary = try? await fetchReferralSummary(token: token)
       statusText = "Signed in."
@@ -717,6 +748,7 @@ final class DayflowAuthManager: ObservableObject {
 
   private func resetSignedOutState(status: String) {
     user = nil
+    DayflowAccountIdentity.clear()
     entitlements = .free
     referralSummary = nil
     pendingEmail = nil
@@ -762,10 +794,12 @@ final class DayflowAuthManager: ObservableObject {
 
   private func makeRequest(path: String, method: String) throws -> URLRequest {
     guard let endpoint else {
-      throw DayflowAuthError.message("Invalid Dayflow backend URL.")
+      throw DayflowAuthError.message(
+        "Dayflow account service must use HTTPS, or loopback HTTP for local development."
+      )
     }
 
-    guard let url = URL(string: "\(endpoint)\(path)") else {
+    guard let url = URL(string: path, relativeTo: endpoint)?.absoluteURL else {
       throw DayflowAuthError.message("Invalid Dayflow backend URL.")
     }
 
@@ -778,7 +812,7 @@ final class DayflowAuthManager: ObservableObject {
   }
 
   private func send<Response: Decodable>(_ request: URLRequest) async throws -> Response {
-    let (data, response) = try await URLSession.shared.data(for: request)
+    let (data, response) = try await DayflowAuthHTTP.noRedirectSession.data(for: request)
     let path = request.url?.path
     guard let httpResponse = response as? HTTPURLResponse else {
       throw DayflowAuthError.nonHTTP(path: path)

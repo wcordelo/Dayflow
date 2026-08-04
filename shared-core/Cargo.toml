@@ -1,0 +1,40 @@
+[package]
+name = "dayflow-core"
+version = "0.1.0"
+description = "Portable Dayflow event, privacy, encryption, and projection core"
+edition = "2021"
+license = "MIT"
+
+[lib]
+name = "dayflow_core"
+crate-type = ["rlib", "cdylib", "staticlib"]
+
+[features]
+default = []
+uniffi = ["dep:uniffi"]
+uniffi-bindings = ["uniffi", "uniffi/cli"]
+
+[dependencies]
+argon2 = "0.5"
+base64 = "0.22"
+chacha20poly1305 = { version = "0.10", features = ["std"] }
+chrono = { version = "0.4", features = ["serde"] }
+ed25519-dalek = { version = "2", features = ["rand_core"] }
+hkdf = "0.12"
+rand_core = { version = "0.6", features = ["getrandom"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+thiserror = "2"
+uuid = { version = "1", features = ["v4", "serde"] }
+x25519-dalek = { version = "2", features = ["static_secrets"] }
+zeroize = { version = "1", features = ["derive"] }
+uniffi = { version = "0.32", optional = true }
+
+[[bin]]
+name = "uniffi-bindgen"
+path = "uniffi-bindgen.rs"
+required-features = ["uniffi-bindings"]
+
+[dev-dependencies]
+serde_json = "1"

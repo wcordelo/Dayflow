@@ -1,0 +1,5 @@
+module DayflowCoreFFI {
+  header "dayflow_core.h"
+  link "dayflow_core"
+  export *
+}

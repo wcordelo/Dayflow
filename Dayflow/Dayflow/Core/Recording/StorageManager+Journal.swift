@@ -57,6 +57,7 @@ extension StorageManager {
           entry.status,
         ])
     }
+    DayflowMacEventWriter.appendJournal(day: entry.day, storage: self)
   }
 
   /// Update just the intentions/notes/goals fields (morning form)
@@ -82,6 +83,7 @@ extension StorageManager {
             """, arguments: [day, intentions, notes, goals])
       }
     }
+    DayflowMacEventWriter.appendJournal(day: day, storage: self)
   }
 
   /// Update just the reflections field (evening reflection)
@@ -106,6 +108,7 @@ extension StorageManager {
             """, arguments: [day, reflections])
       }
     }
+    DayflowMacEventWriter.appendJournal(day: day, storage: self)
   }
 
   /// Update just the AI summary field
@@ -130,6 +133,7 @@ extension StorageManager {
             """, arguments: [day, summary])
       }
     }
+    DayflowMacEventWriter.appendJournal(day: day, storage: self)
   }
 
   /// Fetch the most recent journal summary within the last N days

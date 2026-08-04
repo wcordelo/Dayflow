@@ -1,0 +1,8 @@
+[bindings.swift]
+module_name = "DayflowCore"
+cdylib_name = "dayflow_core"
+generate_codable_conformance = true
+
+[bindings.kotlin]
+package_name = "app.dayflow.core"
+cdylib_name = "dayflow_core"

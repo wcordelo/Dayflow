@@ -6,9 +6,20 @@ final class RecordingPrivacySettingsViewModel: ObservableObject {
   @Published private(set) var installedApplications: [RecordingPrivacyApplication] = []
   @Published private(set) var blockedIdentifiers: [String]
   @Published private(set) var isLoadingApplications = false
+  @Published private(set) var captureOptions: [RecordingCaptureOption] = [
+    RecordingCaptureOption(
+      source: .activeDisplay,
+      label: "Active display",
+      detail: "Follows the display under the pointer"
+    )
+  ]
+  @Published private(set) var selectedCaptureSource: RecordingCaptureSource
+  @Published private(set) var isLoadingCaptureOptions = false
+  @Published private(set) var captureSourceError: String?
 
   init() {
     blockedIdentifiers = RecordingPrivacyPreferences.blockedApplicationIdentifiers()
+    selectedCaptureSource = RecordingCapturePreferences.selectedSource()
   }
 
   var filteredApplications: [RecordingPrivacyApplication] {
@@ -39,6 +50,67 @@ final class RecordingPrivacySettingsViewModel: ObservableObject {
 
   func handleOnAppear() {
     loadInstalledApplicationsIfNeeded()
+    loadCaptureOptions()
+  }
+
+  func loadCaptureOptions() {
+    guard !isLoadingCaptureOptions else { return }
+    isLoadingCaptureOptions = true
+    captureSourceError = nil
+
+    Task {
+      do {
+        let loadedOptions = try await RecordingCapturePreferences.availableOptions()
+        await MainActor.run {
+          self.applyCaptureOptions(loadedOptions)
+        }
+      } catch {
+        await MainActor.run {
+          self.captureSourceError =
+            "Dayflow cannot list capture sources until Screen Recording permission is enabled."
+          self.isLoadingCaptureOptions = false
+        }
+      }
+    }
+  }
+
+  func selectCaptureSource(_ option: RecordingCaptureOption) {
+    selectedCaptureSource = option.source
+    RecordingCapturePreferences.save(option.source)
+    AnalyticsService.shared.capture(
+      "recording_capture_source_saved",
+      [
+        "source_kind": option.source.kind.rawValue,
+        "source_id": option.source.id,
+      ]
+    )
+  }
+
+  func resetCaptureSource() {
+    selectCaptureSource(
+      RecordingCaptureOption(
+        source: .activeDisplay,
+        label: "Active display",
+        detail: "Follows the display under the pointer"
+      )
+    )
+  }
+
+  private func applyCaptureOptions(_ options: [RecordingCaptureOption]) {
+    let persisted = RecordingCapturePreferences.selectedSource()
+    var resolvedOptions = options
+    if !resolvedOptions.contains(where: { $0.id == persisted.id }), persisted.kind != .activeDisplay {
+      resolvedOptions.append(
+        RecordingCaptureOption(
+          source: persisted,
+          label: persisted.displayName,
+          detail: "Unavailable — choose another source"
+        )
+      )
+    }
+    captureOptions = resolvedOptions
+    selectedCaptureSource = persisted
+    isLoadingCaptureOptions = false
   }
 
   func loadInstalledApplicationsIfNeeded() {

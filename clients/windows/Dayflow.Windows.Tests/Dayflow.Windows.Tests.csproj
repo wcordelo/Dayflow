@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
+    <IsTestProject>true</IsTestProject>
+    <IsPackable>false</IsPackable>
+    <Platforms>x64</Platforms>
+    <PlatformTarget>x64</PlatformTarget>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <DayflowCoreNativePath>$(MSBuildThisFileDirectory)..\..\..\shared-core\dist\windows\win-x64\dayflow_core.dll</DayflowCoreNativePath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Dayflow.Windows\Core\DayflowCoreInterop.cs" Link="Core\DayflowCoreInterop.cs" />
+    <Compile Include="..\Dayflow.Windows\Core\DayflowEventEnvelope.cs" Link="Core\DayflowEventEnvelope.cs" />
+    <Compile Include="..\Dayflow.Windows\Core\DayflowWindowsKeyStore.cs" Link="Core\DayflowWindowsKeyStore.cs" />
+    <Compile Include="..\Dayflow.Windows\Core\DayflowWindowsStorage.cs" Link="Core\DayflowWindowsStorage.cs" />
+    <Compile Include="..\Dayflow.Windows\Core\DayflowWindowsAccountKeyRing.cs" Link="Core\DayflowWindowsAccountKeyRing.cs" />
+    <Compile Include="..\Dayflow.Windows\Core\DayflowWindowsCapturePolicy.cs" Link="Core\DayflowWindowsCapturePolicy.cs" />
+    <Compile Include="..\Dayflow.Windows\Core\DayflowWindowsSharedSettingContract.cs" Link="Core\DayflowWindowsSharedSettingContract.cs" />
+    <Compile Include="..\Dayflow.Windows\Core\DayflowAIProviderConfiguration.cs" Link="Core\DayflowAIProviderConfiguration.cs" />
+    <Compile Include="..\Dayflow.Windows\Core\DayflowLocalSyncStore.cs" Link="Core\DayflowLocalSyncStore.cs" />
+    <Compile Include="..\Dayflow.Windows\Core\DayflowWindowsPushNotifications.cs" Link="Core\DayflowWindowsPushNotifications.cs" />
+    <Compile Include="..\Dayflow.Windows\Capture\WindowsCaptureAdapter.cs" Link="Capture\WindowsCaptureAdapter.cs" />
+    <Compile Include="..\Dayflow.Windows\Capture\WindowsForegroundContext.cs" Link="Capture\WindowsForegroundContext.cs" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.13.0" />
+    <PackageReference Include="MSTest.TestAdapter" Version="3.6.4" />
+    <PackageReference Include="MSTest.TestFramework" Version="3.6.4" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.8" />
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.3.1" />
+  </ItemGroup>
+
+  <Target Name="RequireDayflowCoreNative" BeforeTargets="Build">
+    <Error Condition="!Exists('$(DayflowCoreNativePath)')"
+           Text="Missing $(DayflowCoreNativePath). Run scripts/build_dayflow_core_windows.ps1 -Architecture x64 before running the Windows C-ABI smoke tests." />
+    <Copy SourceFiles="$(DayflowCoreNativePath)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
+  </Target>
+</Project>

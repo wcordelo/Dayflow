@@ -28,6 +28,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
   private var recorder: ScreenRecorder!
   private var analyticsSub: AnyCancellable?
   private var analyticsPreferenceObserver: NSObjectProtocol?
+  private var multiDeviceAuthSubscription: AnyCancellable?
   private var powerObserver: NSObjectProtocol?
   private let screenshotShortcutTracker = ScreenshotShortcutTracker.shared
   private var deepLinkRouter: AppDeepLinkRouter?
@@ -36,6 +37,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
   private var appLaunchDate: Date?
   private var foregroundStartTime: Date?
   private var referralUsageStartedAt: Date?
+  private lazy var multiDeviceSync = DayflowMultiDeviceViewModel.shared
 
   override init() {
     UserDefaultsMigrator.migrateIfNeeded()
@@ -199,6 +201,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     // Track foreground sessions for engagement analytics
     setupForegroundTracking()
+    setupMultiDeviceSync()
   }
 
   func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
@@ -224,6 +227,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     ) { [weak self] _ in
       MainActor.assumeIsolated {
         self?.foregroundStartTime = Date()
+        self?.multiDeviceSync.syncIfConfigured()
       }
     }
 
@@ -244,6 +248,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
           ])
       }
     }
+  }
+
+  private func setupMultiDeviceSync() {
+    multiDeviceAuthSubscription = DayflowAuthManager.shared.objectWillChange
+      .receive(on: DispatchQueue.main)
+      .sink { [weak self] _ in
+        DispatchQueue.main.async { [weak self] in
+          self?.multiDeviceSync.syncIfConfigured()
+        }
+      }
+    DayflowAuthManager.shared.loadStoredSessionIfNeeded()
+    multiDeviceSync.syncIfConfigured()
   }
 
   private func applySavedDockIconPreference() {

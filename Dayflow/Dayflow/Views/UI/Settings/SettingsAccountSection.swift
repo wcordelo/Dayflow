@@ -18,6 +18,11 @@ struct SettingsAccountSection: View {
         upgradeSection
       }
 
+      SettingsMultiDeviceSection(
+        isSignedIn: authManager.isSignedIn,
+        signInAction: { isAuthSheetPresented = true }
+      )
+
       referralSection
 
       if let errorText = authManager.errorText {

@@ -15,6 +15,14 @@ scripts/release.env
 Dayflow/Config/LocalSecrets.xcconfig
 signed/
 
+# Generated multi-device build products. Recreate these with the checked-in
+# Rust binding/XCFramework scripts on the native target machines.
+shared-core/target/
+shared-core/dist/
+clients/ios/.build/
+clients/android/.gradle/
+clients/generated/android/jniLibs/
+
 # Ignore Claude prompt notes
 CLAUDE.md
 claude.md

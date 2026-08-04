@@ -391,8 +391,12 @@ extension GeminiDirectProvider {
     ]
 
     // Single API call (retry logic handled by outer loop in generateActivityCards)
-    let urlWithKey = endpointForModel(model) + "?key=\(apiKey)"
-    var request = URLRequest(url: URL(string: urlWithKey)!)
+    guard let url = URL(string: endpointForModel(model)) else {
+      throw NSError(
+        domain: "GeminiError", code: 8,
+        userInfo: [NSLocalizedDescriptionKey: "Invalid Gemini model endpoint"])
+    }
+    var request = authorizedRequest(url: url)
     request.httpMethod = "POST"
     request.setValue("application/json", forHTTPHeaderField: "Content-Type")
     request.timeoutInterval = 120  // 2 minutes timeout

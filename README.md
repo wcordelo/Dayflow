@@ -91,8 +91,21 @@ You choose how AI analysis runs:
 - Local models through Ollama or LM Studio
 - Gemini with your own API key
 - ChatGPT or Claude through their local CLI tools
+- Optional Dayflow Pro hosted analysis, when explicitly selected
 
 If you choose a cloud provider, activity data needed for analysis is sent to that provider. If you choose local models, analysis stays on your machine.
+
+## Multi-device direction
+
+Dayflow is being extended as one native product family: Mac first, followed by
+Windows, Android/ChromeOS, and iOS clients. Each device remains local-first and
+keeps raw screenshots/recordings local by default. Cross-device sync is designed
+to transfer only encrypted derived events so the timeline, journal, priorities,
+reflections, and chat context can stay coherent without turning a web companion
+into the product surface.
+
+The implementation contracts and current foundation live in
+[`docs/multi-device/`](docs/multi-device/README.md).
 
 ## Install
 
@@ -125,10 +138,91 @@ brew install --cask dayflow
 ```bash
 git clone https://github.com/JerryZLiu/Dayflow.git
 cd Dayflow
+bash scripts/verify_dayflow_setup.sh
+./scripts/build_dayflow_core_xcframework.sh
 open Dayflow/Dayflow.xcodeproj
 ```
 
+The setup preflight is deliberately non-interactive: it checks Xcode first-launch
+status, the native-only test/product boundaries, the retired autostart agent, the
+single-instance setting, and stale Dayflow/AutomationMode processes without
+opening the app or launching automation. It does not invoke `xcodebuild -list` by
+default. On some Xcode hosts that command aborts inside Apple's CoreDevice
+plug-in even when the license is healthy, so project evaluation is an explicit
+diagnostic rather than part of the safe setup path. An already-running system
+`AutomationMode` session is a hard stop, so it cannot be confused with a Dayflow
+failure or contaminate a manual run. Use `--run-tests` when you also want
+the host-runnable Rust, iOS package, Android native-library/JVM, and relay
+checks. The Android check runs only when a local SDK and `gradle` are available;
+it verifies the Rust ABI exports before running JVM tests, never starts an
+emulator, and never launches a client:
+
+```bash
+bash scripts/verify_dayflow_setup.sh --run-tests
+```
+
+If you specifically need to diagnose Xcode project evaluation, opt into the
+separate command. It may surface an existing Xcode/CoreDevice crash report, but
+it still never opens Dayflow or launches UI automation:
+
+```bash
+bash scripts/verify_dayflow_setup.sh --evaluate-project
+```
+
 Select the Dayflow scheme in Xcode and run it.
+
+The shared `Dayflow` scheme's Test action runs only the non-interactive
+`DayflowTests` target. Dayflow intentionally does not ship an XCTest UI target:
+the macOS UI-automation harness can take over the desktop, repeat launches, and
+leave the system `AutomationMode` overlay behind after a failed session.
+Manual app runs remain available through the normal Run action:
+
+```bash
+xcodebuild \
+  -project Dayflow/Dayflow.xcodeproj -scheme Dayflow \
+  -destination 'platform=macOS' build
+```
+
+The repository includes a regression guard for this separation:
+
+```bash
+bash scripts/verify_dayflow_test_scheme.sh
+```
+
+If an older install still registers the archived ADHD Companion as a login
+agent, disable it once with:
+
+```bash
+bash scripts/disable_legacy_dayflow_autostart.sh
+```
+
+The cleanup is scoped to that one launch agent and keeps its plist disabled for
+auditability; it does not remove Dayflow or any user data.
+
+The repository no longer contains the retired ten-minute Cursor/GitHub Bugbot
+automation for the archived companion PR. If that automation was previously
+created in the Cursor dashboard, disable or delete it there too: removing the
+repository definition cannot cancel an already-created dashboard automation.
+
+The archived `adhd-companion` prototype is migration material only. Its
+`npm run dev`, `npm run preview`, and `npm run tauri` commands fail closed and
+cannot reopen the old browser or desktop surface.
+
+Dayflow does not use macOS Automation or AppleScript. Agent source links use a
+Codex deep link when available and otherwise reveal the local transcript in
+Finder; Claude source links always use the safe Finder path. If macOS is still
+showing an `Automation running` overlay from an earlier external automation
+session, press Control-Option-Command-Period once to exit the stale system
+mode, or restart macOS if it does not clear. That overlay is machine-level
+state, not a Dayflow runtime process, and cannot be recreated by the current
+Dayflow target. Rerun the preflight after clearing it; it must report no external
+AutomationMode writer before you open the project.
+
+The Mac target links the generated Rust XCFramework. After changing
+`shared-core/`, move the existing `shared-core/dist/DayflowCore.xcframework`
+aside and rerun the script; it intentionally refuses to overwrite an existing
+framework. Generated frameworks and native build directories are ignored by
+Git.
 
 ## Contributing
 

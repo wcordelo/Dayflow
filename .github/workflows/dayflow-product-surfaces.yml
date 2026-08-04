@@ -1,0 +1,43 @@
+name: Dayflow product surfaces
+
+on:
+  push:
+    paths:
+      - "Dayflow/**"
+      - "clients/**"
+      - "shared-core/**"
+      - "companion-web/**"
+      - "adhd-companion/**"
+      - "docs/multi-device/MIGRATION_AND_DEPRECATION.md"
+      - "scripts/verify_dayflow_setup.sh"
+      - "scripts/verify_dayflow_product_surfaces.sh"
+      - ".cursor/automations/**"
+      - ".github/workflows/bugbot-autofix.yml"
+      - ".github/workflows/dayflow-product-surfaces.yml"
+  pull_request:
+    paths:
+      - "Dayflow/**"
+      - "clients/**"
+      - "shared-core/**"
+      - "companion-web/**"
+      - "adhd-companion/**"
+      - "docs/multi-device/MIGRATION_AND_DEPRECATION.md"
+      - "scripts/verify_dayflow_setup.sh"
+      - "scripts/verify_dayflow_product_surfaces.sh"
+      - ".cursor/automations/**"
+      - ".github/workflows/bugbot-autofix.yml"
+      - ".github/workflows/dayflow-product-surfaces.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    name: Keep retired surfaces out of the product
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Verify relay-only web scope, archived prototype, and native boundaries
+        run: bash scripts/verify_dayflow_product_surfaces.sh

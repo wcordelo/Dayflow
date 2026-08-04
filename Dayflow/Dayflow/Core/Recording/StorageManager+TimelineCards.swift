@@ -108,6 +108,9 @@ extension StorageManager {
         ])
       lastId = db.lastInsertedRowID
     }
+    if let lastId {
+      DayflowMacEventWriter.appendTimelineCard(recordID: lastId, storage: self)
+    }
     return lastId
   }
 
@@ -125,61 +128,76 @@ extension StorageManager {
 
   func deleteTimelineCard(recordId: Int64) -> String? {
     var videoPath: String? = nil
+    var didDelete = false
 
-    try? timedWrite("deleteTimelineCard(recordId:\(recordId))") { db in
-      guard
-        let cardRow = try Row.fetchOne(
-          db,
+    do {
+      try timedWrite("deleteTimelineCard(recordId:\(recordId))") { db in
+        guard
+          let cardRow = try Row.fetchOne(
+            db,
+            sql: """
+                  SELECT video_summary_url, start_ts, end_ts, batch_id
+                  FROM timeline_cards
+                  WHERE id = ?
+                    AND is_deleted = 0
+              """,
+            arguments: [recordId]
+          )
+        else {
+          return
+        }
+
+        videoPath = cardRow["video_summary_url"]
+
+        let startTs: Int = cardRow["start_ts"] ?? 0
+        let endTs: Int = cardRow["end_ts"] ?? 0
+        let batchId: Int64? = cardRow["batch_id"]
+
+        try db.execute(
           sql: """
-                SELECT video_summary_url, start_ts, end_ts, batch_id
-                FROM timeline_cards
+                UPDATE timeline_cards
+                SET is_deleted = 1
                 WHERE id = ?
                   AND is_deleted = 0
             """,
           arguments: [recordId]
         )
-      else {
-        return
+        didDelete = db.changesCount > 0
+
+        guard endTs > startTs else { return }
+
+        if let batchId {
+          try db.execute(
+            sql: """
+                  DELETE FROM observations
+                  WHERE batch_id = ?
+                    AND ((start_ts < ? AND end_ts > ?)
+                      OR (start_ts >= ? AND start_ts < ?))
+              """,
+            arguments: [batchId, endTs, startTs, startTs, endTs]
+          )
+        } else {
+          try db.execute(
+            sql: """
+                  DELETE FROM observations
+                  WHERE (start_ts < ? AND end_ts > ?)
+                     OR (start_ts >= ? AND start_ts < ?)
+              """,
+            arguments: [endTs, startTs, startTs, endTs]
+          )
+        }
       }
+    } catch {
+      videoPath = nil
+      didDelete = false
+      print("deleteTimelineCard(recordId:\(recordId)) failed: \(error)")
+    }
 
-      videoPath = cardRow["video_summary_url"]
-
-      let startTs: Int = cardRow["start_ts"] ?? 0
-      let endTs: Int = cardRow["end_ts"] ?? 0
-      let batchId: Int64? = cardRow["batch_id"]
-
-      try db.execute(
-        sql: """
-              UPDATE timeline_cards
-              SET is_deleted = 1
-              WHERE id = ?
-                AND is_deleted = 0
-          """,
-        arguments: [recordId]
+    if didDelete {
+      DayflowMacEventWriter.appendTombstone(
+        targetID: "mac:v1:timeline_card:\(recordId)",
+        storage: self
       )
-
-      guard endTs > startTs else { return }
-
-      if let batchId {
-        try db.execute(
-          sql: """
-                DELETE FROM observations
-                WHERE batch_id = ?
-                  AND ((start_ts < ? AND end_ts > ?)
-                    OR (start_ts >= ? AND start_ts < ?))
-            """,
-          arguments: [batchId, endTs, startTs, startTs, endTs]
-        )
-      } else {
-        try db.execute(
-          sql: """
-                DELETE FROM observations
-                WHERE (start_ts < ? AND end_ts > ?)
-                   OR (start_ts >= ? AND start_ts < ?)
-            """,
-          arguments: [endTs, startTs, startTs, endTs]
-        )
-      }
     }
 
     return videoPath
@@ -197,6 +215,7 @@ extension StorageManager {
               WHERE id = ?
           """, arguments: [trimmed, cardId])
     }
+    DayflowMacEventWriter.appendTimelineCard(recordID: cardId, storage: self)
   }
 
   func updateTimelineCardTitle(cardId: Int64, title: String) {
@@ -211,6 +230,7 @@ extension StorageManager {
               WHERE id = ?
           """, arguments: [trimmed, cardId])
     }
+    DayflowMacEventWriter.appendTimelineCard(recordID: cardId, storage: self)
   }
 
   // MARK: - Onboarding Card
@@ -809,6 +829,8 @@ extension StorageManager {
     let encoder = JSONEncoder()
     var insertedIds: [Int64] = []
     var videoPaths: [String] = []
+    var deletedRecordIds: [Int64] = []
+    var didPersist = false
 
     // Setup date formatter for parsing clock times
     let timeFormatter = DateFormatter()
@@ -842,8 +864,10 @@ extension StorageManager {
                  AND (category != 'System' OR batch_id = ?)
           """, arguments: [toTs, fromTs, fromTs, toTs, batchId])
 
-      for _ in cardsToDelete {
-        // Cards being deleted - no-op needed, just iterating to trigger side effects
+      for row in cardsToDelete {
+        if let id: Int64 = row["id"] {
+          deletedRecordIds.append(id)
+        }
       }
 
       // Soft delete existing cards in the range using timestamp columns
@@ -953,6 +977,19 @@ extension StorageManager {
         // Capture the ID of the inserted card
         let insertedId = db.lastInsertedRowID
         insertedIds.append(insertedId)
+      }
+      didPersist = true
+    }
+
+    if didPersist {
+      for recordID in deletedRecordIds {
+        DayflowMacEventWriter.appendTombstone(
+          targetID: "mac:v1:timeline_card:\(recordID)",
+          storage: self
+        )
+      }
+      for recordID in insertedIds {
+        DayflowMacEventWriter.appendTimelineCard(recordID: recordID, storage: self)
       }
     }
 
