@@ -252,9 +252,14 @@ jobs:
       - name: Run Android UniFFI binding smoke test
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 36
+          # API 36 boots unreliably on ubuntu-latest and can remain visible to
+          # Gradle as an emulator with an unknown API level. Keep the runtime
+          # one stable generation below compile/target SDK 36 for CI smoke
+          # coverage; the app still builds against the current SDK above.
+          api-level: 35
           arch: x86_64
           profile: pixel_2
+          emulator-boot-timeout: 900
           script: gradle :app:connectedDebugAndroidTest
           working-directory: clients/android
 

@@ -184,6 +184,8 @@ require_text 'isValidDatedSharedSettingKey' "$repo_root/Dayflow/Dayflow/Core/Mul
 
 require_text 'DayflowCoreBindings' "$repo_root/clients/ios/Package.swift"
 require_text '../../shared-core/dist/DayflowCoreiOS.xcframework' "$repo_root/clients/ios/Package.swift"
+require_text 'didConfigureRootView' "$repo_root/clients/ios/Sources/DayflowMobile/DayflowMobileApp.swift"
+forbid_text '.task {' "$repo_root/clients/ios/Sources/DayflowMobile/DayflowMobileApp.swift"
 require_text 'import DayflowCoreBindings' "$repo_root/clients/ios/Sources/DayflowMobile/DayflowCoreBridge.swift"
 require_text 'func canonicalDeviceRequest' "$repo_root/clients/ios/Sources/DayflowMobile/DayflowCoreBridge.swift"
 require_text 'core.canonicalDeviceRequest' "$repo_root/clients/ios/Sources/DayflowMobile/DayflowMobileSync.swift"
@@ -502,6 +504,8 @@ require_text 'build_dayflow_core_android.sh' "$repo_root/.github/workflows/dayfl
 require_text 'build_dayflow_core_windows.ps1' "$repo_root/.github/workflows/dayflow-native-clients.yml"
 require_text 'gradle-version: "9.5.0"' "$repo_root/.github/workflows/dayflow-native-clients.yml"
 require_text 'sdkmanager "platform-tools" "platforms;android-36"' "$repo_root/.github/workflows/dayflow-native-clients.yml"
+require_text 'api-level: 35' "$repo_root/.github/workflows/dayflow-native-clients.yml"
+require_text 'emulator-boot-timeout: 900' "$repo_root/.github/workflows/dayflow-native-clients.yml"
 forbid_text 'platforms;android-37.0' "$repo_root/.github/workflows/dayflow-native-clients.yml"
 require_text ':app:bundleRelease' "$repo_root/.github/workflows/dayflow-native-clients.yml"
 require_text 'dayflow-android-release' "$repo_root/.github/workflows/dayflow-native-clients.yml"

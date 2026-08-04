@@ -6,13 +6,16 @@ public struct DayflowMobileApp: App {
     @StateObject private var appModel = DayflowMobileAppModel()
     @UIApplicationDelegateAdaptor(DayflowMobileAppDelegate.self) private var appDelegate
     @Environment(\.scenePhase) private var scenePhase
+    @State private var didConfigureRootView = false
 
     public init() {}
 
     public var body: some Scene {
         WindowGroup {
             DayflowRootView(captureSession: captureSession, appModel: appModel)
-                .task {
+                .onAppear {
+                    guard !didConfigureRootView else { return }
+                    didConfigureRootView = true
                     appDelegate.appModel = appModel
                     appDelegate.requestRemoteNotificationRegistration()
                     captureSession.onDerivedSample = { timestamp in
