@@ -250,6 +250,8 @@ jobs:
           if-no-files-found: error
 
       - name: Run Android UniFFI binding smoke test
+        id: android-emulator-smoke
+        continue-on-error: true
         uses: reactivecircus/android-emulator-runner@v2
         with:
           # API 36 boots unreliably on ubuntu-latest and can remain visible to
@@ -259,6 +261,25 @@ jobs:
           api-level: 35
           arch: x86_64
           profile: pixel_2
+          emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -gpu swiftshader_indirect
+          disable-animations: true
+          emulator-boot-timeout: 900
+          script: gradle :app:connectedDebugAndroidTest
+          working-directory: clients/android
+
+      - name: Retry Android UniFFI binding smoke test
+        if: steps.android-emulator-smoke.outcome == 'failure'
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          # The runner can sporadically leave adb offline while the emulator
+          # is still completing its first boot. A fresh AVD attempt keeps this
+          # infrastructure failure from masking the actual instrumentation
+          # result, while a second test failure still fails the job.
+          api-level: 35
+          arch: x86_64
+          profile: pixel_2
+          emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -gpu swiftshader_indirect
+          disable-animations: true
           emulator-boot-timeout: 900
           script: gradle :app:connectedDebugAndroidTest
           working-directory: clients/android
