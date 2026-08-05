@@ -1,0 +1,28 @@
+#!/usr/bin/env sh
+set -eu
+
+# Lightweight, checked-in Gradle bootstrap. It intentionally avoids a
+# machine-specific Gradle installation while keeping the version aligned with
+# the Android Gradle Plugin used by this client.
+VERSION="${DAYFLOW_GRADLE_VERSION:-9.6.1}"
+USER_HOME="${GRADLE_USER_HOME:-${HOME}/.gradle}"
+CACHE_DIR="${USER_HOME}/wrapper/dists/dayflow-${VERSION}"
+GRADLE_HOME="${CACHE_DIR}/gradle-${VERSION}"
+
+if [ ! -x "${GRADLE_HOME}/bin/gradle" ]; then
+    mkdir -p "${CACHE_DIR}"
+    archive="${CACHE_DIR}/gradle-${VERSION}-bin.zip"
+    if [ ! -f "${archive}" ]; then
+        curl --fail --location --silent --show-error \
+            "https://services.gradle.org/distributions/gradle-${VERSION}-bin.zip" \
+            --output "${archive}"
+    fi
+    staging="${CACHE_DIR}/staging-$$"
+    mkdir -p "${staging}"
+    trap 'rm -rf "${staging}"' EXIT
+    unzip -q -o "${archive}" -d "${staging}"
+    rm -rf "${GRADLE_HOME}"
+    mv "${staging}/gradle-${VERSION}" "${GRADLE_HOME}"
+fi
+
+exec "${GRADLE_HOME}/bin/gradle" "$@"

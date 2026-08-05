@@ -12,6 +12,7 @@ public sealed partial class MainWindow : Window
     private readonly WindowsGraphicsCaptureFramePipeline? _capturePipeline;
     private readonly WindowsCaptureAdapter _captureAdapter;
     private readonly DayflowWindowsAppModel _appModel;
+    private bool _isApplyingState;
 
     public MainWindow()
     {
@@ -155,6 +156,45 @@ public sealed partial class MainWindow : Window
         ApplyAppModelState();
     }
 
+    private void SavePrivacy_Click(object sender, RoutedEventArgs e)
+    {
+        _appModel.SetPrivacyFields(
+            BlockedApplicationsTextBox.Text,
+            BlockedWindowTitlesTextBox.Text);
+        _appModel.SavePrivacyPreferences();
+        ApplyAppModelState();
+    }
+
+    private void SharedCapturePauseToggle_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (_isApplyingState) return;
+        _appModel.SetSharedSettingFields(
+            "dayflow.capture.paused",
+            SharedCapturePauseToggle.IsOn ? "true" : "false");
+        _appModel.SaveSharedSetting();
+        ApplyAppModelState();
+    }
+
+    private void ProductNavigation_SelectionChanged(
+        NavigationView sender,
+        NavigationViewSelectionChangedEventArgs args)
+    {
+        if (args.SelectedItem is not NavigationViewItem item
+            || item.Tag is not string tag)
+        {
+            return;
+        }
+
+        TodayPage.Visibility = tag == "today" ? Visibility.Visible : Visibility.Collapsed;
+        TimelinePage.Visibility = tag == "timeline" ? Visibility.Visible : Visibility.Collapsed;
+        WeekPage.Visibility = tag == "week" ? Visibility.Visible : Visibility.Collapsed;
+        JournalPage.Visibility = tag == "journal" ? Visibility.Visible : Visibility.Collapsed;
+        ChatPage.Visibility = tag == "chat" ? Visibility.Visible : Visibility.Collapsed;
+        SettingsPage.Visibility = tag == "settings" ? Visibility.Visible : Visibility.Collapsed;
+        AccountPage.Visibility = tag == "account" ? Visibility.Visible : Visibility.Collapsed;
+        RecoveryPage.Visibility = tag == "recovery" ? Visibility.Visible : Visibility.Collapsed;
+    }
+
     private async void AskChat_Click(object sender, RoutedEventArgs e)
     {
         ReadProviderFields();
@@ -246,10 +286,15 @@ public sealed partial class MainWindow : Window
 
     private void ApplyAppModelState()
     {
+        _isApplyingState = true;
         _captureAdapter.UpdateSharedCapturePause(
             _appModel.Projection.Settings.TryGetValue("dayflow.capture.paused", out var sharedPauseValue)
                 ? sharedPauseValue
                 : null);
+        _captureAdapter.UpdatePrivacyPreferences(
+            DayflowWindowsCapturePolicy.ParseList(_appModel.BlockedApplicationIds),
+            DayflowWindowsCapturePolicy.ParseList(_appModel.BlockedWindowTitleFragments));
+        SharedCapturePauseToggle.IsOn = _appModel.SharedSettingValue.Trim().Equals("true", StringComparison.OrdinalIgnoreCase);
         AccountIdTextBox.Text = _appModel.AccountId;
         AuthUrlTextBox.Text = _appModel.AuthUrl;
         EmailTextBox.Text = _appModel.Email;
@@ -271,12 +316,16 @@ public sealed partial class MainWindow : Window
         ProviderModelTextBox.Text = _appModel.ProviderModelId;
         ProviderApiKeyPasswordBox.Password = _appModel.ProviderApiKey;
         ProviderMessageText.Text = _appModel.ProviderMessage ?? "";
+        BlockedApplicationsTextBox.Text = _appModel.BlockedApplicationIds;
+        BlockedWindowTitlesTextBox.Text = _appModel.BlockedWindowTitleFragments;
+        PrivacyMessageText.Text = _appModel.PrivacyMessage ?? "";
         var localState = _appModel.PendingEventCount > 0
             ? $"{_appModel.PendingEventCount} encrypted event(s) pending sync"
             : _appModel.AccountId.Length == 0
                 ? "stored on this device; connect an account to sync"
                 : "projection is up to date with the last sync";
         ProjectionSummaryText.Text = $"{_appModel.Projection.TimelineCardCount} timeline cards · {_appModel.Projection.JournalEntryCount} journal entries · {_appModel.Projection.PriorityCount} priorities · {_appModel.Projection.ReflectionCount} reflections · {_appModel.Projection.Settings.Count} shared settings · Local record state: {localState}";
+        WeekSummaryText.Text = $"{_appModel.Projection.TimelineCardCount} cards across {_appModel.Projection.TimelineCards.Values.Select(card => card.Day).Distinct().Count()} logical days · {_appModel.Projection.JournalEntryCount} journal entries · {_appModel.Projection.ReflectionCount} reflections.";
         JournalDayTextBox.Text = _appModel.JournalDay;
         JournalBodyTextBox.Text = _appModel.JournalBody;
         JournalMessageText.Text = _appModel.JournalMessage ?? "";
@@ -310,6 +359,28 @@ public sealed partial class MainWindow : Window
             TimelineRecordsPanel.Children.Add(RecordRow(
                 card.Title,
                 $"{card.Day} · {card.Summary}",
+                () => _appModel.DeleteTimelineCard(card.Id)));
+        }
+        TodayRecordsPanel.Children.Clear();
+        foreach (var card in _appModel.Projection.TimelineCards.Values
+                     .Where(item => item.Day == _appModel.JournalDay)
+                     .OrderBy(item => item.StartTimestamp)
+                     .Take(10))
+        {
+            TodayRecordsPanel.Children.Add(RecordRow(
+                card.Title,
+                $"{card.Category} · {card.Summary}",
+                () => _appModel.DeleteTimelineCard(card.Id)));
+        }
+        WeekRecordsPanel.Children.Clear();
+        foreach (var card in _appModel.Projection.TimelineCards.Values
+                     .OrderByDescending(item => item.Day)
+                     .ThenByDescending(item => item.StartTimestamp)
+                     .Take(20))
+        {
+            WeekRecordsPanel.Children.Add(RecordRow(
+                $"{card.Day} · {card.Title}",
+                $"{card.Category} · {card.Summary}",
                 () => _appModel.DeleteTimelineCard(card.Id)));
         }
         JournalRecordsPanel.Children.Clear();
@@ -367,6 +438,7 @@ public sealed partial class MainWindow : Window
             }
             DevicesPanel.Children.Add(row);
         }
+        _isApplyingState = false;
     }
 
     private static StackPanel RecordRow(string title, string detail, Action onDelete)

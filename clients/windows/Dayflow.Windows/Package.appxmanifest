@@ -5,9 +5,9 @@
   xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
   IgnorableNamespaces="uap rescap">
   <Identity
-    Name="Dayflow.Windows"
-    Publisher="CN=Dayflow"
-    Version="0.1.0.0" />
+    Name="$(DayflowPackageIdentityName)"
+    Publisher="$(DayflowPackagePublisher)"
+    Version="$(DayflowPackageVersion)" />
   <Properties>
     <DisplayName>Dayflow</DisplayName>
     <PublisherDisplayName>Dayflow</PublisherDisplayName>

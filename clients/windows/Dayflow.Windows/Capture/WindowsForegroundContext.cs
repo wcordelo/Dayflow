@@ -10,14 +10,18 @@ namespace Dayflow.Windows.Capture;
 /// </summary>
 internal static class WindowsForegroundContext
 {
-    public sealed record Snapshot(string? ApplicationId, string? WindowTitle);
+    public sealed record Snapshot(
+        string? ApplicationId,
+        string? WindowTitle,
+        bool PrivateContext,
+        bool DrmContent);
 
     public static Snapshot Read()
     {
         var window = GetForegroundWindow();
         if (window == IntPtr.Zero)
         {
-            return new(null, null);
+            return new(null, null, false, false);
         }
 
         var titleBuffer = new StringBuilder(512);
@@ -44,7 +48,11 @@ internal static class WindowsForegroundContext
             }
         }
 
-        return new(applicationID, title);
+        return new(
+            applicationID,
+            title,
+            DayflowWindowsCapturePolicy.IsPrivateContext(applicationID, title),
+            DayflowWindowsCapturePolicy.IsDrmContent(applicationID, title));
     }
 
     [DllImport("user32.dll", SetLastError = true)]

@@ -25,6 +25,7 @@ public sealed class DayflowWindowsAppModel
     private readonly DayflowAIProviderStore _providerStore;
     private readonly DayflowWindowsSyncSession _syncSession;
     private readonly DayflowWindowsPushNotifications _pushNotifications;
+    private DayflowWindowsPrivacyPreferences _privacyPreferences;
     private long _lastCaptureEventTimestamp;
     private readonly object _syncGate = new();
     private Task? _syncTask;
@@ -38,6 +39,9 @@ public sealed class DayflowWindowsAppModel
         _providerStore = new DayflowAIProviderStore(_keyStore);
         _syncSession = syncSession ?? new DayflowWindowsSyncSession(_keyStore);
         _pushNotifications = new DayflowWindowsPushNotifications(() => SyncForPushWakeAsync());
+        _privacyPreferences = DayflowWindowsPrivacyPreferences.Load();
+        BlockedApplicationIds = string.Join(Environment.NewLine, _privacyPreferences.BlockedApplicationIds);
+        BlockedWindowTitleFragments = string.Join(Environment.NewLine, _privacyPreferences.BlockedWindowTitleFragments);
         LoadSession();
         if (string.IsNullOrWhiteSpace(AccountId)) PrepareLocalWorkspace();
     }
@@ -80,6 +84,9 @@ public sealed class DayflowWindowsAppModel
     public string ProviderModelId { get; private set; } = "llama3.2";
     public string ProviderApiKey { get; private set; } = "";
     public string? ProviderMessage { get; private set; }
+    public string BlockedApplicationIds { get; private set; } = "";
+    public string BlockedWindowTitleFragments { get; private set; } = "";
+    public string? PrivacyMessage { get; private set; }
     public bool IsRotatingKey { get; private set; }
     public string? RotationMessage { get; private set; }
 
@@ -111,6 +118,29 @@ public sealed class DayflowWindowsAppModel
         ProviderEndpoint = endpoint;
         ProviderModelId = modelId;
         ProviderApiKey = apiKey;
+    }
+
+    public void SetPrivacyFields(string blockedApplications, string blockedWindowTitles)
+    {
+        BlockedApplicationIds = blockedApplications;
+        BlockedWindowTitleFragments = blockedWindowTitles;
+    }
+
+    public void SavePrivacyPreferences()
+    {
+        try
+        {
+            _privacyPreferences = new DayflowWindowsPrivacyPreferences(
+                DayflowWindowsCapturePolicy.ParseList(BlockedApplicationIds),
+                DayflowWindowsCapturePolicy.ParseList(BlockedWindowTitleFragments));
+            _privacyPreferences.Save();
+            PrivacyMessage = "Privacy exclusions saved on this Windows device.";
+        }
+        catch (Exception error)
+        {
+            PrivacyMessage = error.Message;
+        }
+        Notify();
     }
 
     public Task SyncAsync(CancellationToken cancellationToken = default)
@@ -525,7 +555,9 @@ public sealed class DayflowWindowsAppModel
         _lastCaptureEventTimestamp = timestamp;
         var offsetMinutes = (int)TimeZoneInfo.Local.GetUtcOffset(sample.CapturedAt).TotalMinutes;
         var day = DayflowCoreInterop.LogicalDayKey(timestamp, offsetMinutes);
-        var description = DayflowWindowsCapturePolicy.MetadataOnlyDescription(sample.ApplicationId);
+        var description = DayflowWindowsCapturePolicy.DeriveCard(
+            sample.ApplicationId,
+            sample.WindowTitle);
         var workspace = ActiveWorkspaceId();
         _syncSession.EnqueueCaptureDerived(
             workspace,
@@ -535,9 +567,9 @@ public sealed class DayflowWindowsAppModel
             timestamp,
             description.Title,
             description.Summary,
-            "activity_capture",
+            description.Category,
             "windows_graphics_capture",
-            "privacy_gated_foreground_metadata");
+            description.DerivationMode);
         Projection = DayflowWindowsProjection.FromJson(_syncSession.ProjectLocal(workspace));
         PendingEventCount = _syncSession.PendingEventCount(workspace);
         Notify();

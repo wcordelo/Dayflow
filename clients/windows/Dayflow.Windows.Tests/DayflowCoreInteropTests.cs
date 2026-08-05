@@ -127,17 +127,34 @@ public sealed class DayflowCoreInteropTests
     }
 
     [TestMethod]
-    public void MetadataOnlyCaptureDescriptionDoesNotSyncWindowTitles()
+    public void LocalDerivationProducesMeaningfulCardsWithoutWindowTitleLeakage()
     {
-        var description = DayflowWindowsCapturePolicy.MetadataOnlyDescription("Notes.exe");
+        var card = DayflowWindowsCapturePolicy.DeriveCard(
+            "windows:process:code.exe",
+            "Quarterly planning - private");
 
-        StringAssert.Contains(description.Title, "Notes.exe");
-        StringAssert.Contains(description.Summary, "Raw pixels were released before event creation.");
-        Assert.IsFalse(description.Title.Contains("Quarterly planning", StringComparison.Ordinal));
-        Assert.IsFalse(description.Summary.Contains("Quarterly planning", StringComparison.Ordinal));
+        Assert.AreEqual("Focused work session", card.Title);
+        Assert.AreEqual("focus", card.Category);
+        Assert.AreEqual("privacy_gated_local_context_v1", card.DerivationMode);
+        Assert.IsFalse(card.Summary.Contains("Quarterly planning", StringComparison.Ordinal));
+        Assert.IsFalse(card.Summary.Contains("private", StringComparison.Ordinal));
+    }
 
-        var generic = DayflowWindowsCapturePolicy.MetadataOnlyDescription(null);
-        Assert.AreEqual("Activity observed locally", generic.Title);
+    [TestMethod]
+    public void ForegroundPrivacyClassificationFailsClosedForProtectedContexts()
+    {
+        Assert.IsTrue(DayflowWindowsCapturePolicy.IsPrivateContext(
+            "windows:process:chrome",
+            "InPrivate - Password"));
+        Assert.IsTrue(DayflowWindowsCapturePolicy.IsDrmContent(
+            "windows:process:chrome",
+            "Protected content"));
+        Assert.IsFalse(DayflowWindowsCapturePolicy.IsPrivateContext(
+            "windows:process:code",
+            "Dayflow"));
+        CollectionAssert.AreEqual(
+            new[] { "chrome", "teams" },
+            DayflowWindowsCapturePolicy.ParseList("chrome; teams; chrome"));
     }
 
     [TestMethod]
