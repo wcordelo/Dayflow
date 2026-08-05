@@ -127,20 +127,6 @@ public sealed class DayflowCoreInteropTests
     }
 
     [TestMethod]
-    public void MetadataOnlyCaptureDescriptionDoesNotSyncWindowTitles()
-    {
-        var description = DayflowWindowsCapturePolicy.MetadataOnlyDescription("Notes.exe");
-
-        StringAssert.Contains(description.Title, "Notes.exe");
-        StringAssert.Contains(description.Summary, "Raw pixels were released before event creation.");
-        Assert.IsFalse(description.Title.Contains("Quarterly planning", StringComparison.Ordinal));
-        Assert.IsFalse(description.Summary.Contains("Quarterly planning", StringComparison.Ordinal));
-
-        var generic = DayflowWindowsCapturePolicy.MetadataOnlyDescription(null);
-        Assert.AreEqual("Activity observed locally", generic.Title);
-    }
-
-    [TestMethod]
     public void LocalDerivationProducesMeaningfulCardsWithoutWindowTitleLeakage()
     {
         var card = DayflowWindowsCapturePolicy.DeriveCard(

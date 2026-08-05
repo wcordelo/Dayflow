@@ -361,6 +361,28 @@ public sealed partial class MainWindow : Window
                 $"{card.Day} · {card.Summary}",
                 () => _appModel.DeleteTimelineCard(card.Id)));
         }
+        TodayRecordsPanel.Children.Clear();
+        foreach (var card in _appModel.Projection.TimelineCards.Values
+                     .Where(item => item.Day == _appModel.JournalDay)
+                     .OrderBy(item => item.StartTimestamp)
+                     .Take(10))
+        {
+            TodayRecordsPanel.Children.Add(RecordRow(
+                card.Title,
+                $"{card.Category} · {card.Summary}",
+                () => _appModel.DeleteTimelineCard(card.Id)));
+        }
+        WeekRecordsPanel.Children.Clear();
+        foreach (var card in _appModel.Projection.TimelineCards.Values
+                     .OrderByDescending(item => item.Day)
+                     .ThenByDescending(item => item.StartTimestamp)
+                     .Take(20))
+        {
+            WeekRecordsPanel.Children.Add(RecordRow(
+                $"{card.Day} · {card.Title}",
+                $"{card.Category} · {card.Summary}",
+                () => _appModel.DeleteTimelineCard(card.Id)));
+        }
         JournalRecordsPanel.Children.Clear();
         foreach (var entry in _appModel.Projection.JournalEntries.Values.OrderByDescending(item => item.Day).ThenByDescending(item => item.Id).Take(10))
         {

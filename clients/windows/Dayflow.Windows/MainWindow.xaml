@@ -44,6 +44,7 @@
           <TextBlock Text="Today" FontSize="26" />
           <TextBlock Text="Your local activity, priorities, and sync state for the current logical day." TextWrapping="WrapWholeWords" />
           <TextBlock x:Name="ProjectionSummaryText" TextWrapping="WrapWholeWords" />
+          <StackPanel x:Name="TodayRecordsPanel" Spacing="8" />
           <StackPanel x:Name="PriorityRecordsPanel" Spacing="6" />
         </StackPanel>
 
@@ -57,7 +58,7 @@
           <TextBlock Text="Week" FontSize="26" />
           <TextBlock Text="Review the last seven logical days from the local projection." TextWrapping="WrapWholeWords" />
           <TextBlock x:Name="WeekSummaryText" TextWrapping="WrapWholeWords" />
-          <TextBlock Text="Use Timeline for the complete card list; this weekly surface remains available for the compact summary." TextWrapping="WrapWholeWords" Opacity="0.75" />
+          <StackPanel x:Name="WeekRecordsPanel" Spacing="8" />
         </StackPanel>
 
         <StackPanel x:Name="JournalPage" Visibility="Collapsed" Spacing="12">

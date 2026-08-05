@@ -21,6 +21,8 @@ on:
       - "scripts/verify_dayflow_setup.sh"
       - "scripts/verify_dayflow_test_scheme.sh"
       - "scripts/verify_dayflow_native_contracts.sh"
+      - "scripts/verify_dayflow_native_release_inputs.sh"
+      - "docs/multi-device/NATIVE_CLIENT_ACCEPTANCE_CHECKLIST.md"
       - "scripts/release_dmg.sh"
       - ".github/workflows/dayflow-native-clients.yml"
   pull_request:
@@ -42,6 +44,8 @@ on:
       - "scripts/verify_dayflow_setup.sh"
       - "scripts/verify_dayflow_test_scheme.sh"
       - "scripts/verify_dayflow_native_contracts.sh"
+      - "scripts/verify_dayflow_native_release_inputs.sh"
+      - "docs/multi-device/NATIVE_CLIENT_ACCEPTANCE_CHECKLIST.md"
       - "scripts/release_dmg.sh"
       - ".github/workflows/dayflow-native-clients.yml"
 

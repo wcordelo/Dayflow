@@ -73,6 +73,9 @@ unpackaged developer path as the default. Pass
 `-p:DayflowPackagePublisher=<real-publisher>` and
 `-p:DayflowPackageVersion=<four-part-version>` for a signed release; the
 placeholder `CN=Dayflow` identity is rejected when signing is required.
+Before packaging, release automation can validate that the PFX, publisher,
+version, and password inputs are present with
+`bash scripts/verify_dayflow_native_release_inputs.sh windows`.
 Signing, installation/upgrade, and capture lifecycle tests remain release
 gates. See Microsoft's
 [single-project MSIX guidance](https://learn.microsoft.com/en-us/windows/apps/windows-app-sdk/single-project-msix)

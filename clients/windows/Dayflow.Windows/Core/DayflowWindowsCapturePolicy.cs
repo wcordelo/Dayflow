@@ -22,27 +22,6 @@ public static class DayflowWindowsCapturePolicy
         };
     }
 
-    /// <summary>
-    /// Builds the safe fallback card used when the frame pipeline has not run a
-    /// local visual model. Window titles are intentionally not accepted here:
-    /// they commonly contain document names, meeting subjects, or message
-    /// previews and should not become synced metadata by accident.
-    /// </summary>
-    public static (string Title, string Summary) MetadataOnlyDescription(string? applicationId)
-    {
-        var application = NormalizeApplicationId(applicationId);
-        if (application is null)
-        {
-            return (
-                "Activity observed locally",
-                "Dayflow recorded a privacy-approved local activity sample. Raw pixels were released before event creation.");
-        }
-
-        return (
-            $"Activity in {application}",
-            $"Dayflow recorded a privacy-approved local activity sample from {application}. Raw pixels were released before event creation.");
-    }
-
     public static bool IsPrivateContext(string? applicationId, string? windowTitle)
     {
         var value = $"{applicationId} {windowTitle}".ToLowerInvariant();
