@@ -110,6 +110,23 @@ class DayflowEventEnvelopeTest {
     }
 
     @Test
+    fun providerWakeAdapterRejectsPayloadContentBeforeSchedulingSync() {
+        assertTrue(
+            DayflowAndroidPushWakeAdapter.acceptsData(
+                mapOf("kind" to DayflowSyncWakeContract.SYNC_AVAILABLE),
+            ),
+        )
+        assertFalse(
+            DayflowAndroidPushWakeAdapter.acceptsData(
+                mapOf(
+                    "kind" to DayflowSyncWakeContract.SYNC_AVAILABLE,
+                    "journal" to "must never be accepted",
+                ),
+            ),
+        )
+    }
+
+    @Test
     fun syncHealthSummaryKeepsReplayStateAfterRestart() {
         val health = DayflowAndroidSyncHealth(
             lastSyncAtMillis = 100_000,

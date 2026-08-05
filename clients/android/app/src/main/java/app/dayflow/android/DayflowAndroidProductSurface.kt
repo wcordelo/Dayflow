@@ -29,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import app.dayflow.android.capture.CaptureStatus
+import app.dayflow.android.capture.DayflowCaptureStatusFields
 
 private enum class DayflowAndroidRoute(val label: String) {
     TODAY("Today"),

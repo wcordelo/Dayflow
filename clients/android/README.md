@@ -113,6 +113,12 @@ shape.
 Each MediaProjection frame is closed after a shared Rust privacy decision that
 includes the current application/window context and block policy.
 
+`DayflowAndroidPushWakeAdapter` is the provider boundary for FCM: a messaging
+service may hand its data map to `intentForData`, and only the exact
+`{"kind":"sync_available"}` shape reaches the existing receiver and bounded
+`JobService` sync. Provider credentials and the physical background-delivery
+test remain release-host work.
+
 `app/src/androidTest` contains the executable UniFFI smoke test. It seals and
 projects a journal event through the packaged Rust library, checks the shared
 privacy decision, exercises recovery-key versions, and asserts the canonical
