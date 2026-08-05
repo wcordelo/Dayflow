@@ -122,8 +122,10 @@ tasks.register("verifyDayflowReleaseSigning") {
     }
 }
 
-tasks.named("bundleRelease") {
-    dependsOn("verifyDayflowReleaseSigning")
+tasks.configureEach {
+    if (name == "bundleRelease") {
+        dependsOn("verifyDayflowReleaseSigning")
+    }
 }
 
 dependencies {

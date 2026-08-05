@@ -253,7 +253,7 @@ require_text 'localVisualDerivationIsBoundedAndClassifiedWithoutRawPixels' "$rep
 require_text 'fun registerPushToken' "$repo_root/clients/android/app/src/main/java/app/dayflow/android/DayflowAndroidSync.kt"
 require_text 'fun unregisterPushToken' "$repo_root/clients/android/app/src/main/java/app/dayflow/android/DayflowAndroidSync.kt"
 require_text 'fun deleteJournalEntry' "$repo_root/clients/android/app/src/main/java/app/dayflow/android/DayflowAndroidAccountSession.kt"
-require_text 'deleteTimelineCard' "$repo_root/clients/android/app/src/main/java/app/dayflow/android/MainActivity.kt"
+require_text 'deleteTimelineCard' "$repo_root/clients/android/app/src/main/java/app/dayflow/android/DayflowAndroidProductSurface.kt"
 require_text 'source = "android_media_projection"' "$repo_root/clients/android/app/src/main/java/app/dayflow/android/capture/DayflowCaptureService.kt"
 require_text 'keyStore.hasAccountKeyAdmission(it)' "$repo_root/clients/android/app/src/main/java/app/dayflow/android/capture/DayflowCaptureService.kt"
 require_text 'accountStore.load()?.accountId' "$repo_root/clients/android/app/src/main/java/app/dayflow/android/capture/DayflowCaptureService.kt"

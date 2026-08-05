@@ -107,18 +107,21 @@ fun DayflowAndroidProductSurface(
                     subtitle = "Your local activity and priorities for $today.",
                     cards = appState.projection.timelineCardsForDay(today),
                     priorities = appState.projection.priorities.values.filter { it.day == today },
+                    onDelete = appModel::deleteTimelineCard,
                 )
                 DayflowAndroidRoute.TIMELINE -> TimelinePage(
                     title = "Timeline",
                     subtitle = "Recent cards from the local projection.",
                     cards = appState.projection.latestTimelineCards(),
                     priorities = emptyList(),
+                    onDelete = appModel::deleteTimelineCard,
                 )
                 DayflowAndroidRoute.WEEK -> TimelinePage(
                     title = "Last seven days",
                     subtitle = "A compact weekly view ending on $today.",
                     cards = appState.projection.timelineCardsForWeek(today),
                     priorities = emptyList(),
+                    onDelete = appModel::deleteTimelineCard,
                 )
                 DayflowAndroidRoute.JOURNAL -> JournalPage(appModel, appState)
                 DayflowAndroidRoute.CHAT -> ChatPage(appModel, appState)
@@ -165,6 +168,7 @@ private fun TimelinePage(
     subtitle: String,
     cards: List<DayflowAndroidTimelineCard>,
     priorities: List<DayflowAndroidPriority>,
+    onDelete: (String) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(title, style = MaterialTheme.typography.headlineSmall)
@@ -185,6 +189,7 @@ private fun TimelinePage(
                             "${card.source} · ${card.derivationMode}",
                             style = MaterialTheme.typography.bodySmall,
                         )
+                        TextButton(onClick = { onDelete(card.id) }) { Text("Delete") }
                     }
                 }
             }
