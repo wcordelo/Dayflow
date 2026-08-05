@@ -10,6 +10,7 @@ import app.dayflow.android.capture.CaptureStatus
 import app.dayflow.android.capture.CaptureStatusRecovery
 import app.dayflow.android.capture.CaptureLifecycleSignals
 import app.dayflow.android.capture.DayflowNativeStatusKeys
+import app.dayflow.android.capture.DayflowLocalVisualDeriver
 
 class DayflowEventEnvelopeTest {
     @Test
@@ -186,6 +187,24 @@ class DayflowEventEnvelopeTest {
                 nonce = "bm9uY2U",
                 ciphertext = "Y2lwaGVydGV4dA",
             ),
+        )
+    }
+
+    @Test
+    fun localVisualDerivationIsBoundedAndClassifiedWithoutRawPixels() {
+        val brightHighContrast = byteArrayOf(
+            255.toByte(), 255.toByte(), 255.toByte(), 0,
+            0, 0, 0, 0,
+            255.toByte(), 255.toByte(), 255.toByte(), 0,
+            0, 0, 0, 0,
+        )
+        val profile = DayflowLocalVisualDeriver.profileFromRgba(brightHighContrast)
+
+        assertEquals("balanced", profile.tone)
+        assertEquals("high-contrast", profile.contrast)
+        assertEquals(
+            "privacy_gated_local_visual_v1",
+            DayflowLocalVisualDeriver.DERIVATION_MODE,
         )
     }
 }

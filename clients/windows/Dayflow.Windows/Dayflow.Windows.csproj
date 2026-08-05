@@ -16,6 +16,9 @@
     <WindowsPackageType Condition="'$(DayflowPackaging)' != 'true'">None</WindowsPackageType>
     <EnableMsixTooling>true</EnableMsixTooling>
     <PublishProfile Condition="'$(DayflowPackaging)' == 'true'">Properties\PublishProfiles\win10-$(Platform).pubxml</PublishProfile>
+    <DayflowPackageIdentityName Condition="'$(DayflowPackageIdentityName)' == ''">Dayflow.Windows</DayflowPackageIdentityName>
+    <DayflowPackagePublisher Condition="'$(DayflowPackagePublisher)' == ''">CN=Dayflow</DayflowPackagePublisher>
+    <DayflowPackageVersion Condition="'$(DayflowPackageVersion)' == ''">0.1.0.0</DayflowPackageVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
@@ -50,6 +53,14 @@
   <Target Name="RequireDayflowCoreNative" BeforeTargets="Build" Condition="'$(SkipDayflowCoreNativeCheck)' != 'true'">
     <Error Condition="'$(DayflowCoreRuntimeIdentifier)' == ''" Text="Select a Windows architecture (for example -p:Platform=x64 -p:RuntimeIdentifier=win-x64) before building Dayflow.Windows." />
     <Error Condition="'$(DayflowCoreRuntimeIdentifier)' != '' And !Exists('$(DayflowCoreNativePath)')" Text="Missing $(DayflowCoreNativePath). Run scripts/build_dayflow_core_windows.ps1 for $(DayflowCoreRuntimeIdentifier), then build again." />
+  </Target>
+
+  <Target Name="RequireDayflowReleaseIdentity" BeforeTargets="GenerateAppxPackageOnBuild"
+          Condition="'$(DayflowPackaging)' == 'true' And '$(AppxPackageSigningEnabled)' == 'true'">
+    <Error Condition="'$(DayflowPackagePublisher)' == 'CN=Dayflow'"
+           Text="Signed Dayflow packages require -p:DayflowPackagePublisher with the production certificate publisher." />
+    <Error Condition="'$(DayflowPackageVersion)' == '0.1.0.0'"
+           Text="Signed Dayflow packages require -p:DayflowPackageVersion with a release version." />
   </Target>
 
   <ItemGroup>

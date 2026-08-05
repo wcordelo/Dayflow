@@ -32,10 +32,12 @@ local projection replay; the C# transport only sends encrypted envelope JSON.
 `DayflowAIProviderStore` keeps provider routing and API keys behind DPAPI. The
 WinUI chat surface builds a bounded prompt from the local projection and calls
 Ollama, Gemini, or an OpenAI-compatible endpoint directly; the sync relay is not
-used for inference. `EnqueueCaptureDerived` seals locally derived metadata plus
-its source and derivation mode into SQLite without persisting raw frames. The
-current adapter uses `privacy_gated_foreground_metadata`; a local AI worker can
-produce a richer derived card later without changing the relay contract.
+used for inference. `EnqueueCaptureDerived` seals locally derived cards plus
+their source and derivation mode into SQLite without persisting raw frames. The
+current adapter uses `privacy_gated_local_context_v1`; it classifies the
+privacy-approved foreground application into a bounded semantic card without
+persisting window titles or pixels. A richer local visual model can replace the
+deriver later without changing the relay contract.
 Each frame sample is evaluated through the shared Rust JSON privacy decision
 ABI, including optional application/window block rules, before the adapter emits
 it to a local derivation sink.
@@ -67,8 +69,12 @@ Get-ChildItem "$env:TEMP\DayflowPackages" -Recurse -Filter *.msix
 ```
 
 The package manifest reuses the checked-in Dayflow artwork and keeps the
-unpackaged developer path as the default. Signing, installation/upgrade, and
-capture lifecycle tests remain release gates. See Microsoft's
+unpackaged developer path as the default. Pass
+`-p:DayflowPackagePublisher=<real-publisher>` and
+`-p:DayflowPackageVersion=<four-part-version>` for a signed release; the
+placeholder `CN=Dayflow` identity is rejected when signing is required.
+Signing, installation/upgrade, and capture lifecycle tests remain release
+gates. See Microsoft's
 [single-project MSIX guidance](https://learn.microsoft.com/en-us/windows/apps/windows-app-sdk/single-project-msix)
 for the Windows App SDK packaging model.
 

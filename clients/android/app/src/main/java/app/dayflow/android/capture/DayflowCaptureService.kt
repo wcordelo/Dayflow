@@ -222,6 +222,10 @@ class DayflowCaptureService : Service() {
                 if (now - lastDerivedSampleAt >= 60) {
                     lastDerivedSampleAt = now
                     runCatching {
+                        val derivedCard = DayflowLocalVisualDeriver.derive(
+                            it,
+                            applicationId = "android:$packageName",
+                        )
                         // The service is a second trust boundary: callers can
                         // be stale across an account sign-out or approval
                         // transition. Only an explicitly admitted account
@@ -240,11 +244,11 @@ class DayflowCaptureService : Service() {
                             day = day,
                             startTimestamp = now,
                             endTimestamp = now,
-                            title = "Android activity captured locally",
-                            summary = "Privacy-approved MediaProjection metadata; no frame was synced.",
-                            category = "activity_capture",
+                            title = derivedCard.title,
+                            summary = derivedCard.summary,
+                            category = derivedCard.category,
                             source = "android_media_projection",
-                            derivationMode = "privacy_gated_local_metadata",
+                            derivationMode = derivedCard.derivationMode,
                         )
                     }.onFailure { error ->
                         statusStore.save(

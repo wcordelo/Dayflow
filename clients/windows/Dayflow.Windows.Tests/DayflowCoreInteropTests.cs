@@ -141,6 +141,37 @@ public sealed class DayflowCoreInteropTests
     }
 
     [TestMethod]
+    public void LocalDerivationProducesMeaningfulCardsWithoutWindowTitleLeakage()
+    {
+        var card = DayflowWindowsCapturePolicy.DeriveCard(
+            "windows:process:code.exe",
+            "Quarterly planning - private");
+
+        Assert.AreEqual("Focused work session", card.Title);
+        Assert.AreEqual("focus", card.Category);
+        Assert.AreEqual("privacy_gated_local_context_v1", card.DerivationMode);
+        Assert.IsFalse(card.Summary.Contains("Quarterly planning", StringComparison.Ordinal));
+        Assert.IsFalse(card.Summary.Contains("private", StringComparison.Ordinal));
+    }
+
+    [TestMethod]
+    public void ForegroundPrivacyClassificationFailsClosedForProtectedContexts()
+    {
+        Assert.IsTrue(DayflowWindowsCapturePolicy.IsPrivateContext(
+            "windows:process:chrome",
+            "InPrivate - Password"));
+        Assert.IsTrue(DayflowWindowsCapturePolicy.IsDrmContent(
+            "windows:process:chrome",
+            "Protected content"));
+        Assert.IsFalse(DayflowWindowsCapturePolicy.IsPrivateContext(
+            "windows:process:code",
+            "Dayflow"));
+        CollectionAssert.AreEqual(
+            new[] { "chrome", "teams" },
+            DayflowWindowsCapturePolicy.ParseList("chrome; teams; chrome"));
+    }
+
+    [TestMethod]
     public void WindowsPushWakeAcceptsOnlyTheContentFreeAvailabilitySignal()
     {
         Assert.IsTrue(DayflowWindowsPushNotifications.AcceptsSyncAvailablePayload(

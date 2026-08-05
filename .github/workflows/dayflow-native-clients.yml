@@ -7,6 +7,9 @@ on:
       - "shared-core/**"
       - "Dayflow/**"
       - "clients/android/**"
+      - "clients/android/gradlew"
+      - "clients/android/gradlew.bat"
+      - "clients/android/gradle/**"
       - "clients/ios/**"
       - "clients/generated/**"
       - "clients/windows/**"
@@ -25,6 +28,9 @@ on:
       - "shared-core/**"
       - "Dayflow/**"
       - "clients/android/**"
+      - "clients/android/gradlew"
+      - "clients/android/gradlew.bat"
+      - "clients/android/gradle/**"
       - "clients/ios/**"
       - "clients/generated/**"
       - "clients/windows/**"
@@ -234,7 +240,7 @@ jobs:
           gradle-version: "9.5.0"
 
       - name: Assemble and test Android client
-        run: gradle :app:assembleDebug :app:bundleRelease :app:testDebugUnitTest
+        run: ./gradlew :app:assembleDebug :app:bundleRelease :app:testDebugUnitTest
         working-directory: clients/android
 
       - name: Verify Android Play artifact
@@ -264,7 +270,7 @@ jobs:
           emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -gpu swiftshader_indirect
           disable-animations: true
           emulator-boot-timeout: 900
-          script: gradle :app:connectedDebugAndroidTest
+          script: ./gradlew :app:connectedDebugAndroidTest
           working-directory: clients/android
 
       - name: Retry Android UniFFI binding smoke test
@@ -281,7 +287,7 @@ jobs:
           emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -gpu swiftshader_indirect
           disable-animations: true
           emulator-boot-timeout: 900
-          script: gradle :app:connectedDebugAndroidTest
+          script: ./gradlew :app:connectedDebugAndroidTest
           working-directory: clients/android
 
   windows:
