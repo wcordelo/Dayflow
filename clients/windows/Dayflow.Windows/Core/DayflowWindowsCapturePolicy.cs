@@ -67,7 +67,7 @@ public static class DayflowWindowsCapturePolicy
             LocalDerivationMode);
     }
 
-    public static IReadOnlyList<string> ParseList(string? value) =>
+    public static string[] ParseList(string? value) =>
         (value ?? "")
             .Split(new[] { '\r', '\n', ',', ';' }, StringSplitOptions.RemoveEmptyEntries)
             .Select(item => item.Trim())
