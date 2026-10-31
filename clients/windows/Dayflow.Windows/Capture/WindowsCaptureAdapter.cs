@@ -268,6 +268,14 @@ public sealed class WindowsCaptureAdapter
         }
     }
 
+    public void UpdatePrivacyPreferences(
+        IReadOnlyCollection<string>? blockedApplicationIds,
+        IReadOnlyCollection<string>? blockedWindowTitleFragments)
+    {
+        _blockedApplicationIds = blockedApplicationIds ?? Array.Empty<string>();
+        _blockedWindowTitleFragments = blockedWindowTitleFragments ?? Array.Empty<string>();
+    }
+
     public static bool SharedCapturePauseEnabled(string? value)
         => DayflowWindowsCapturePolicy.SharedCapturePauseEnabled(value);
 
@@ -310,6 +318,8 @@ public sealed class WindowsCaptureAdapter
             var foreground = WindowsForegroundContext.Read();
             _applicationId = foreground.ApplicationId ?? _applicationId;
             _windowTitle = foreground.WindowTitle ?? _windowTitle ?? _item?.DisplayName;
+            _privateContext = foreground.PrivateContext;
+            _drmContent = foreground.DrmContent;
             _lastForegroundContextAt = sample.CapturedAt;
         }
 

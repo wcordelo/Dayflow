@@ -1,6 +1,7 @@
 package app.dayflow.android
 
 import org.json.JSONObject
+import java.time.LocalDate
 
 data class DayflowAndroidChatContextItem(
     val id: String,
@@ -55,6 +56,27 @@ data class DayflowAndroidProjection(
     val journalEntryCount: Int get() = journalEntries.size
     val priorityCount: Int get() = priorities.size
     val reflectionCount: Int get() = reflections.size
+
+    fun timelineCardsForDay(day: String): List<DayflowAndroidTimelineCard> =
+        timelineCards.values
+            .filter { it.day == day }
+            .sortedWith(compareBy<DayflowAndroidTimelineCard> { it.startTimestamp }.thenBy { it.id })
+
+    fun timelineCardsForWeek(day: String): List<DayflowAndroidTimelineCard> {
+        val selectedDay = runCatching { LocalDate.parse(day) }.getOrNull() ?: return emptyList()
+        val weekStart = selectedDay.minusDays(6)
+        return timelineCards.values
+            .filter { card ->
+                val cardDay = runCatching { LocalDate.parse(card.day) }.getOrNull()
+                cardDay != null && !cardDay.isBefore(weekStart) && !cardDay.isAfter(selectedDay)
+            }
+            .sortedWith(compareByDescending<DayflowAndroidTimelineCard> { it.day }.thenByDescending { it.startTimestamp })
+    }
+
+    fun latestTimelineCards(limit: Int = 20): List<DayflowAndroidTimelineCard> =
+        timelineCards.values
+            .sortedWith(compareByDescending<DayflowAndroidTimelineCard> { it.day }.thenByDescending { it.startTimestamp })
+            .take(limit)
 
     companion object {
         fun fromJson(value: String): DayflowAndroidProjection {

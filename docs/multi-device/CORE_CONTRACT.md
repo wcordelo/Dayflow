@@ -75,12 +75,12 @@ Supported payloads in v1:
 `CaptureDerived` carries optional `source` and `derivation_mode` strings. They
 are encrypted with the rest of the payload and default to empty when an older
 event is replayed. Native capture adapters must use truthful labels such as
-`android_media_projection` / `privacy_gated_local_metadata` or
-`windows_graphics_capture` / `privacy_gated_foreground_metadata`; a metadata
-sample must not be labeled as AI-derived unless a local model actually produced
-it. The deterministic `TimelineCard` projection retains the same fields, and
-local chat context includes them so a card remains attributable on another
-device.
+`android_media_projection` / `privacy_gated_local_visual_v1` or
+`windows_graphics_capture` / `privacy_gated_local_context_v1`; a bounded local
+visual/context derivation must not be labeled as AI-derived unless a local
+model actually produced it. The deterministic `TimelineCard` projection
+retains the same fields, and local chat context includes them so a card remains
+attributable on another device.
 
 Raw screenshots and recordings are not event payloads and never enter the sync
 queue by default.

@@ -10,6 +10,7 @@ import app.dayflow.android.capture.CaptureStatus
 import app.dayflow.android.capture.CaptureStatusRecovery
 import app.dayflow.android.capture.CaptureLifecycleSignals
 import app.dayflow.android.capture.DayflowNativeStatusKeys
+import app.dayflow.android.capture.DayflowLocalVisualDeriver
 
 class DayflowEventEnvelopeTest {
     @Test
@@ -109,6 +110,23 @@ class DayflowEventEnvelopeTest {
     }
 
     @Test
+    fun providerWakeAdapterRejectsPayloadContentBeforeSchedulingSync() {
+        assertTrue(
+            DayflowAndroidPushWakeAdapter.acceptsData(
+                mapOf("kind" to DayflowSyncWakeContract.SYNC_AVAILABLE),
+            ),
+        )
+        assertFalse(
+            DayflowAndroidPushWakeAdapter.acceptsData(
+                mapOf(
+                    "kind" to DayflowSyncWakeContract.SYNC_AVAILABLE,
+                    "journal" to "must never be accepted",
+                ),
+            ),
+        )
+    }
+
+    @Test
     fun syncHealthSummaryKeepsReplayStateAfterRestart() {
         val health = DayflowAndroidSyncHealth(
             lastSyncAtMillis = 100_000,
@@ -187,5 +205,32 @@ class DayflowEventEnvelopeTest {
                 ciphertext = "Y2lwaGVydGV4dA",
             ),
         )
+    }
+
+    @Test
+    fun localVisualDerivationIsBoundedAndClassifiedWithoutRawPixels() {
+        val brightHighContrast = byteArrayOf(
+            255.toByte(), 255.toByte(), 255.toByte(), 0,
+            0, 0, 0, 0,
+            255.toByte(), 255.toByte(), 255.toByte(), 0,
+            0, 0, 0, 0,
+        )
+        val profile = DayflowLocalVisualDeriver.profileFromRgba(brightHighContrast)
+
+        assertEquals("balanced", profile.tone)
+        assertEquals("high-contrast", profile.contrast)
+        assertEquals(
+            "privacy_gated_local_visual_v1",
+            DayflowLocalVisualDeriver.DERIVATION_MODE,
+        )
+    }
+
+    @Test
+    fun localVisualCategoryIgnoresAndroidPlatformPrefixAndHostPackage() {
+        assertEquals("activity", DayflowLocalVisualDeriver.categoryFor(null))
+        assertEquals("activity", DayflowLocalVisualDeriver.categoryFor("android:app.dayflow.android"))
+        assertEquals("focus", DayflowLocalVisualDeriver.categoryFor("android:com.jetbrains.idea"))
+        assertEquals("communication", DayflowLocalVisualDeriver.categoryFor("android:com.slack"))
+        assertEquals("research", DayflowLocalVisualDeriver.categoryFor("android:com.android.chrome"))
     }
 }

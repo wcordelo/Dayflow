@@ -833,7 +833,7 @@ class DayflowAndroidSyncSession(
         summary: String,
         category: String,
         source: String = "android_media_projection",
-        derivationMode: String = "privacy_gated_local_metadata",
+        derivationMode: String = "privacy_gated_local_visual_v1",
     ) {
         require(captureId.isNotBlank() && day.isNotBlank())
         require(source.isNotBlank() && derivationMode.isNotBlank())

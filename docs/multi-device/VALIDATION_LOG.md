@@ -1210,3 +1210,21 @@ shortcut or a reboot.
   `/opt/homebrew/share/android-commandlinetools`, and the Android JVM suite
   passes against it. The remaining blocker is machine-level AutomationMode,
   which is cleared with Control-Option-Command-Period or a restart.
+
+## Native readiness implementation on Linux Cloud Agent — 2026-08-05
+
+- `bash scripts/verify_dayflow_native_contracts.sh` passes after adding the
+  Android product routes, bounded local visual derivation, Windows product
+  routes, Windows privacy preferences/classification, release identity guards,
+  and the target-host acceptance checklist.
+- `./clients/android/gradlew` bootstraps the pinned Gradle 9.6.1 distribution.
+  Android unit tests could not run in this Linux checkout because no Android
+  SDK is installed; no `local.properties` or machine-specific SDK path was
+  created.
+- Windows WinUI/MSIX build and capture tests could not run because .NET and the
+  Windows SDK are unavailable on Linux. The physical Windows and Chromebook
+  acceptance matrix is recorded in
+  `docs/multi-device/NATIVE_CLIENT_ACCEPTANCE_CHECKLIST.md`.
+- `cargo test --workspace` could not run with the installed Cargo 1.83 because
+  the resolved dependency set requires the stabilized `edition2024` feature;
+  the hosted Rust workflow remains the authoritative compatible toolchain.

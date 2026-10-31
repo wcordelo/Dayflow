@@ -12,6 +12,8 @@ internal static class DayflowWindowsStorage
 
     public static string SyncDirectory => Path.Combine(Root, "Sync");
 
+    public static string PrivacyPreferencesPath => Path.Combine(Root, "privacy-preferences.json");
+
     private static string ResolveRoot()
     {
         var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);

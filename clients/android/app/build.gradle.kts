@@ -2,6 +2,18 @@ import org.gradle.api.GradleException
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import java.nio.charset.StandardCharsets
 
+val releaseKeystorePath = providers.gradleProperty("dayflowReleaseKeystore").orNull
+val releaseKeystorePassword = providers.gradleProperty("dayflowReleaseKeystorePassword").orNull
+val releaseKeyAlias = providers.gradleProperty("dayflowReleaseKeyAlias").orNull
+val releaseKeyPassword = providers.gradleProperty("dayflowReleaseKeyPassword").orNull
+val requireReleaseSigning = providers.gradleProperty("dayflowRequireReleaseSigning").orNull == "true"
+val releaseSigningConfigured = listOf(
+    releaseKeystorePath,
+    releaseKeystorePassword,
+    releaseKeyAlias,
+    releaseKeyPassword,
+).all { !it.isNullOrBlank() }
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
@@ -15,9 +27,28 @@ android {
         applicationId = "app.dayflow.android"
         minSdk = 29
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = providers.gradleProperty("dayflowVersionCode").orNull?.toIntOrNull() ?: 1
+        versionName = providers.gradleProperty("dayflowVersionName").orNull ?: "0.1.0-alpha01"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    signingConfigs {
+        create("release") {
+            if (releaseSigningConfigured) {
+                storeFile = file(releaseKeystorePath!!)
+                storePassword = releaseKeystorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
+    }
+
+    buildTypes {
+        getByName("release") {
+            if (releaseSigningConfigured) {
+                signingConfig = signingConfigs.getByName("release")
+            }
+        }
     }
 
     buildFeatures {
@@ -74,6 +105,27 @@ tasks.register("verifyDayflowCoreNative") {
 
 tasks.named("preBuild") {
     dependsOn("verifyDayflowCoreNative")
+}
+
+tasks.register("verifyDayflowReleaseSigning") {
+    doLast {
+        if (requireReleaseSigning && !releaseSigningConfigured) {
+            throw GradleException(
+                "Release signing is required. Provide dayflowReleaseKeystore, " +
+                    "dayflowReleaseKeystorePassword, dayflowReleaseKeyAlias, and " +
+                    "dayflowReleaseKeyPassword.",
+            )
+        }
+        if (releaseSigningConfigured && !file(releaseKeystorePath!!).isFile) {
+            throw GradleException("Configured Android release keystore does not exist: $releaseKeystorePath")
+        }
+    }
+}
+
+tasks.configureEach {
+    if (name == "bundleRelease") {
+        dependsOn("verifyDayflowReleaseSigning")
+    }
 }
 
 dependencies {

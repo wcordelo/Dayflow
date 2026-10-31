@@ -463,7 +463,7 @@ public sealed class DayflowWindowsSyncSession
         string summary,
         string category,
         string source = "windows_graphics_capture",
-        string derivationMode = "privacy_gated_foreground_metadata")
+        string derivationMode = "privacy_gated_local_context_v1")
     {
         if (string.IsNullOrWhiteSpace(captureId) || string.IsNullOrWhiteSpace(day)) throw new ArgumentException("Capture identity and logical day are required.");
         if (string.IsNullOrWhiteSpace(source) || string.IsNullOrWhiteSpace(derivationMode)) throw new ArgumentException("Capture provenance is required.");
