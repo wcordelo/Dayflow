@@ -55,6 +55,41 @@
     <Error Condition="'$(DayflowCoreRuntimeIdentifier)' != '' And !Exists('$(DayflowCoreNativePath)')" Text="Missing $(DayflowCoreNativePath). Run scripts/build_dayflow_core_windows.ps1 for $(DayflowCoreRuntimeIdentifier), then build again." />
   </Target>
 
+  <!-- Package.appxmanifest keeps $(DayflowPackage*) tokens for contract/override
+       documentation, but MakeAppx does not expand custom MSBuild properties.
+       Expand them into an intermediate manifest before the MSIX pipeline runs. -->
+  <Target Name="ExpandDayflowAppxManifest"
+          BeforeTargets="PrepareForBuild;_GenerateAppxPackage;GenerateAppxPackageOnBuild"
+          Condition="'$(DayflowPackaging)' == 'true'">
+    <PropertyGroup>
+      <_ExpandedDayflowAppxManifest>$(IntermediateOutputPath)ExpandedPackage.appxmanifest</_ExpandedDayflowAppxManifest>
+    </PropertyGroup>
+    <MakeDir Directories="$(IntermediateOutputPath)" />
+    <Copy SourceFiles="$(MSBuildProjectDirectory)\Package.appxmanifest"
+          DestinationFiles="$(_ExpandedDayflowAppxManifest)"
+          OverwriteReadOnlyFiles="true" />
+    <XmlPoke XmlInputPath="$(_ExpandedDayflowAppxManifest)"
+             Query="/*[local-name()='Package']/*[local-name()='Identity']/@Name"
+             Value="$(DayflowPackageIdentityName)" />
+    <XmlPoke XmlInputPath="$(_ExpandedDayflowAppxManifest)"
+             Query="/*[local-name()='Package']/*[local-name()='Identity']/@Publisher"
+             Value="$(DayflowPackagePublisher)" />
+    <XmlPoke XmlInputPath="$(_ExpandedDayflowAppxManifest)"
+             Query="/*[local-name()='Package']/*[local-name()='Identity']/@Version"
+             Value="$(DayflowPackageVersion)" />
+    <ItemGroup>
+      <AppxManifest Remove="@(AppxManifest)" />
+      <AppxManifest Include="$(_ExpandedDayflowAppxManifest)" />
+      <None Remove="Package.appxmanifest" />
+      <Content Remove="Package.appxmanifest" />
+      <Page Remove="Package.appxmanifest" />
+      <ApplicationDefinition Remove="Package.appxmanifest" />
+    </ItemGroup>
+    <PropertyGroup>
+      <AppxManifest>$(_ExpandedDayflowAppxManifest)</AppxManifest>
+    </PropertyGroup>
+  </Target>
+
   <Target Name="RequireDayflowReleaseIdentity" BeforeTargets="GenerateAppxPackageOnBuild"
           Condition="'$(DayflowPackaging)' == 'true' And '$(AppxPackageSigningEnabled)' == 'true'">
     <Error Condition="'$(DayflowPackagePublisher)' == 'CN=Dayflow'"

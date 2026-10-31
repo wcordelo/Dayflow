@@ -298,6 +298,7 @@ require_text 'MSIX</WindowsPackageType>' "$repo_root/clients/windows/Dayflow.Win
 require_text 'None</WindowsPackageType>' "$repo_root/clients/windows/Dayflow.Windows/Dayflow.Windows.csproj"
 require_text 'EnableMsixTooling' "$repo_root/clients/windows/Dayflow.Windows/Dayflow.Windows.csproj"
 require_text 'DayflowPackageIdentityName' "$repo_root/clients/windows/Dayflow.Windows/Dayflow.Windows.csproj"
+require_text 'ExpandDayflowAppxManifest' "$repo_root/clients/windows/Dayflow.Windows/Dayflow.Windows.csproj"
 require_text '$(DayflowPackageIdentityName)' "$repo_root/clients/windows/Dayflow.Windows/Package.appxmanifest"
 require_text 'Square150x150Logo' "$repo_root/clients/windows/Dayflow.Windows/Package.appxmanifest"
 require_text 'GenerateAppxPackageOnBuild' "$repo_root/clients/windows/Dayflow.Windows/Properties/PublishProfiles/win10-x64.pubxml"
