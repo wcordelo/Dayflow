@@ -45,6 +45,11 @@
           <TextBlock Text="Your local activity, priorities, and sync state for the current logical day." TextWrapping="WrapWholeWords" />
           <TextBlock x:Name="ProjectionSummaryText" TextWrapping="WrapWholeWords" />
           <StackPanel x:Name="TodayRecordsPanel" Spacing="8" />
+          <TextBlock Text="Priorities" FontSize="18" />
+          <TextBox x:Name="PriorityDayTextBox" Header="Priority logical day (YYYY-MM-DD)" />
+          <TextBox x:Name="PriorityTextTextBox" Header="What matters today?" AcceptsReturn="True" MinHeight="72" />
+          <Button Content="Save priority locally" Click="SavePriority_Click" />
+          <TextBlock x:Name="PriorityMessageText" TextWrapping="WrapWholeWords" Opacity="0.75" />
           <StackPanel x:Name="PriorityRecordsPanel" Spacing="6" />
         </StackPanel>
 

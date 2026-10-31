@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
+using Dayflow.Windows.Core;
 
 namespace Dayflow.Windows.Capture;
 
