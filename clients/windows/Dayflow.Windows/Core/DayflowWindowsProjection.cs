@@ -51,6 +51,27 @@ public sealed record DayflowWindowsProjection(
     public int PriorityCount => Priorities.Count;
     public int ReflectionCount => Reflections.Count;
 
+    /// <summary>
+    /// Cards whose logical day falls in the inclusive seven-day window ending
+    /// on <paramref name="day"/> (YYYY-MM-DD). Invalid day strings yield an
+    /// empty sequence so the Week page never spills outside the window.
+    /// </summary>
+    public IEnumerable<DayflowWindowsTimelineCard> TimelineCardsForWeek(string day)
+    {
+        if (!DateOnly.TryParse(day, out var selectedDay))
+        {
+            return Array.Empty<DayflowWindowsTimelineCard>();
+        }
+
+        var weekStart = selectedDay.AddDays(-6);
+        return TimelineCards.Values
+            .Where(card => DateOnly.TryParse(card.Day, out var cardDay)
+                && cardDay >= weekStart
+                && cardDay <= selectedDay)
+            .OrderByDescending(card => card.Day)
+            .ThenByDescending(card => card.StartTimestamp);
+    }
+
     public static DayflowWindowsProjection Empty { get; } = new(
         new Dictionary<string, DayflowWindowsTimelineCard>(),
         new Dictionary<string, DayflowWindowsJournalEntry>(),

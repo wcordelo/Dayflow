@@ -224,4 +224,13 @@ class DayflowEventEnvelopeTest {
             DayflowLocalVisualDeriver.DERIVATION_MODE,
         )
     }
+
+    @Test
+    fun localVisualCategoryIgnoresAndroidPlatformPrefixAndHostPackage() {
+        assertEquals("activity", DayflowLocalVisualDeriver.categoryFor(null))
+        assertEquals("activity", DayflowLocalVisualDeriver.categoryFor("android:app.dayflow.android"))
+        assertEquals("focus", DayflowLocalVisualDeriver.categoryFor("android:com.jetbrains.intellij"))
+        assertEquals("communication", DayflowLocalVisualDeriver.categoryFor("android:com.slack"))
+        assertEquals("research", DayflowLocalVisualDeriver.categoryFor("android:com.android.chrome"))
+    }
 }

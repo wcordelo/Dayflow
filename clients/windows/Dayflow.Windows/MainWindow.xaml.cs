@@ -325,7 +325,8 @@ public sealed partial class MainWindow : Window
                 ? "stored on this device; connect an account to sync"
                 : "projection is up to date with the last sync";
         ProjectionSummaryText.Text = $"{_appModel.Projection.TimelineCardCount} timeline cards · {_appModel.Projection.JournalEntryCount} journal entries · {_appModel.Projection.PriorityCount} priorities · {_appModel.Projection.ReflectionCount} reflections · {_appModel.Projection.Settings.Count} shared settings · Local record state: {localState}";
-        WeekSummaryText.Text = $"{_appModel.Projection.TimelineCardCount} cards across {_appModel.Projection.TimelineCards.Values.Select(card => card.Day).Distinct().Count()} logical days · {_appModel.Projection.JournalEntryCount} journal entries · {_appModel.Projection.ReflectionCount} reflections.";
+        var weekCards = _appModel.Projection.TimelineCardsForWeek(_appModel.JournalDay).ToList();
+        WeekSummaryText.Text = $"{weekCards.Count} cards across {weekCards.Select(card => card.Day).Distinct().Count()} logical days in the last seven days · {_appModel.Projection.JournalEntryCount} journal entries · {_appModel.Projection.ReflectionCount} reflections.";
         JournalDayTextBox.Text = _appModel.JournalDay;
         JournalBodyTextBox.Text = _appModel.JournalBody;
         JournalMessageText.Text = _appModel.JournalMessage ?? "";
@@ -373,10 +374,7 @@ public sealed partial class MainWindow : Window
                 () => _appModel.DeleteTimelineCard(card.Id)));
         }
         WeekRecordsPanel.Children.Clear();
-        foreach (var card in _appModel.Projection.TimelineCards.Values
-                     .OrderByDescending(item => item.Day)
-                     .ThenByDescending(item => item.StartTimestamp)
-                     .Take(20))
+        foreach (var card in weekCards.Take(20))
         {
             WeekRecordsPanel.Children.Add(RecordRow(
                 $"{card.Day} · {card.Title}",

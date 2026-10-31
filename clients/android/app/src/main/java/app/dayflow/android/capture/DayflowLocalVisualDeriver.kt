@@ -111,10 +111,20 @@ object DayflowLocalVisualDeriver {
         return profileFromRgba(samples.copyOf(sampleIndex))
     }
 
-    private fun categoryFor(applicationId: String?): String {
-        val normalized = applicationId.orEmpty().lowercase()
+    /**
+     * Classifies from the captured application identity only. Platform
+     * prefixes such as `android:` are stripped so the Dayflow host package
+     * (`android:app.dayflow.android`) does not always become "focus".
+     */
+    internal fun categoryFor(applicationId: String?): String {
+        val normalized = applicationId
+            .orEmpty()
+            .lowercase()
+            .substringAfterLast(':')
+            .trim()
+        if (normalized.isEmpty()) return "activity"
         return when {
-            listOf("android", "studio", "code", "devenv", "idea", "rider", "terminal", "shell")
+            listOf("studio", "code", "devenv", "idea", "rider", "terminal", "shell")
                 .any(normalized::contains) -> "focus"
             listOf("slack", "teams", "zoom", "meet", "discord", "mail", "gmail")
                 .any(normalized::contains) -> "communication"

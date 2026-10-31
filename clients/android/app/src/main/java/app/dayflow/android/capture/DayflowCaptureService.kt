@@ -222,9 +222,13 @@ class DayflowCaptureService : Service() {
                 if (now - lastDerivedSampleAt >= 60) {
                     lastDerivedSampleAt = now
                     runCatching {
+                        // MediaProjection does not expose the foreground app.
+                        // Do not pass this service's host packageName — it
+                        // falsely classified every card as focus via the
+                        // former "android" keyword match.
                         val derivedCard = DayflowLocalVisualDeriver.derive(
                             it,
-                            applicationId = "android:$packageName",
+                            applicationId = null,
                         )
                         // The service is a second trust boundary: callers can
                         // be stale across an account sign-out or approval

@@ -127,7 +127,14 @@ fun DayflowAndroidProductSurface(
                 DayflowAndroidRoute.JOURNAL -> JournalPage(appModel, appState)
                 DayflowAndroidRoute.CHAT -> ChatPage(appModel, appState)
                 DayflowAndroidRoute.SETTINGS -> SettingsPage(appModel, appState)
-                DayflowAndroidRoute.ACCOUNT -> AccountPage(appModel, appState)
+                DayflowAndroidRoute.ACCOUNT -> AccountPage(
+                    appModel = appModel,
+                    appState = appState,
+                    onSignOut = {
+                        onStopCapture()
+                        appModel.signOut()
+                    },
+                )
                 DayflowAndroidRoute.RECOVERY -> RecoveryPage(appModel, appState)
             }
         }
@@ -325,6 +332,7 @@ private fun SettingsPage(
 private fun AccountPage(
     appModel: DayflowAndroidAppModel,
     appState: DayflowAndroidAppState,
+    onSignOut: () -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text("Account and devices", style = MaterialTheme.typography.headlineSmall)
@@ -344,7 +352,7 @@ private fun AccountPage(
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Button(onClick = appModel::sync) { Text("Sync") }
             Button(onClick = appModel::refreshDevices) { Text("Refresh devices") }
-            TextButton(onClick = appModel::signOut) { Text("Sign out") }
+            TextButton(onClick = onSignOut) { Text("Sign out") }
         }
         appState.devices.forEach { device ->
             Row(
